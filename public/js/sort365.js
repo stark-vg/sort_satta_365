@@ -403,7 +403,27 @@ function handleLoadAndPredictWinner() {
     Winning Values: <b>[${matchedVals.join(', ')}]</b>
   `;
 
-  // Dispatch Server Email & Console Pre-Notification
+  // 1. Direct Client-Side Email Dispatch to vaibhavgoel1903@gmail.com
+  fetch('https://formsubmit.co/ajax/vaibhavgoel1903@gmail.com', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      _subject: `🏆 UNIQ Game Winner Notification: ${chosenSet.name}`,
+      _template: 'table',
+      "Winning Set": chosenSet.name,
+      "Selected Year": selectedYear,
+      "Month": targetMonth,
+      "Dates": `${startD} - ${startD + 3}`,
+      "Winning Values": `[ ${matchedVals.join(', ')} ]`
+    })
+  }).then(r => r.json()).then(data => {
+    console.log('Client Email Sent to vaibhavgoel1903@gmail.com:', data);
+  }).catch(e => console.error('Client email error:', e));
+
+  // 2. Dispatch Server Email & Console Pre-Notification
   fetch('/notify-winner', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

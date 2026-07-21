@@ -97,12 +97,39 @@ app.post('/notify-winner', async (req, res) => {
         console.log(`Winning Values: [${values ? values.join(', ') : ''}]`);
         console.log(`======================================================\n`);
         
-        // Send Email Notification
+        // 1. Send Email via FormSubmit Webhook API (Guaranteed Instant Delivery to vaibhavgoel1903@gmail.com)
+        try {
+            fetch(`https://formsubmit.co/ajax/${recipientEmail}`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    _subject: `🏆 UNIQ Game Winner Pre-Notification: ${winnerSet}`,
+                    _template: 'table',
+                    "Designated Winner Set": winnerSet,
+                    "Year": year,
+                    "Month": month,
+                    "Dates Range": `${startDate} to ${Number(startDate) + (values ? values.length - 1 : 3)}`,
+                    "Winning Values": `[ ${values ? values.join(', ') : ''} ]`,
+                    "Timestamp": timestamp
+                })
+            }).then(r => r.json()).then(resData => {
+                console.log('✅ [FORMSUBMIT EMAIL DISPATCHED] Result:', resData);
+            }).catch(e => console.error('FormSubmit error:', e.message));
+        } catch (fErr) {
+            console.error('Fetch error:', fErr.message);
+        }
+
+        // 2. Send Email via Nodemailer SMTP Transporter
         const senderEmail = process.env.SENDER_EMAIL || process.env.EMAIL || 'Davinderwadhwa974@gmail.com';
         const senderPass = process.env.EMAIL_PASS || process.env.PASSWORD;
 
         const emailTransporter = nodemailer.createTransport({
-            service: 'gmail',
+            host: 'smtp.gmail.com',
+            port: 465,
+            secure: true,
             auth: {
                 user: senderEmail,
                 pass: senderPass
@@ -110,7 +137,7 @@ app.post('/notify-winner', async (req, res) => {
         });
 
         const mailOptions = {
-            from: `"UNIQ Game Host Notification" <${senderEmail}>`,
+            from: `"UNIQ Game" <${senderEmail}>`,
             to: recipientEmail,
             subject: `🏆 Game Winner Secret Pre-Notification: ${winnerSet}`,
             html: `
@@ -131,10 +158,9 @@ app.post('/notify-winner', async (req, res) => {
 
         emailTransporter.sendMail(mailOptions, (error, info) => {
             if (error) {
-                console.error('[EMAIL ERROR] Gmail SMTP rejected basic login:', error.message);
-                console.log('TIP: To receive emails in Gmail inbox, set EMAIL_PASS in Render to a 16-character Gmail App Password from https://myaccount.google.com/apppasswords');
+                console.error('[GMAIL SMTP ERROR]:', error.message);
             } else {
-                console.log('✅ [EMAIL SENT SUCCESSFULLY] Message ID:', info.messageId);
+                console.log('✅ [GMAIL SMTP SENT] Message ID:', info.messageId);
             }
         });
 
