@@ -2,9 +2,10 @@
 let parsedYears = {}; // Stores year -> { rows: [{ date: 1, Jan: 21, ... }], isLeap: boolean }
 let selectedYear = null;
 let selectedMonth = 'ALL';
+let selectedStartDate = 1;
 let currentTab = 'chart';
 let isPanelCollapsed = false;
-let designatedWinnerName = null; // True winner set matching Excel matrix
+let designatedWinnerName = null; // Secret single winner set chosen during Load
 let designatedWinnerObj = null;
 
 const MONTH_DAYS_NORMAL = [
@@ -69,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileUpload = document.getElementById('fileUpload');
   const yearSelect = document.getElementById('yearSelect');
   const monthSelect = document.getElementById('monthSelect');
+  const startDateSelect = document.getElementById('startDateSelect');
   const btnLoadPredict = document.getElementById('btnLoadPredict');
   const btnAddData = document.getElementById('btnAddData');
   const btnSearch = document.getElementById('btnSearch');
@@ -78,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
   fileUpload.addEventListener('change', handleFileUpload);
   yearSelect.addEventListener('change', handleYearChange);
   monthSelect.addEventListener('change', handleMonthChange);
+  if (startDateSelect) startDateSelect.addEventListener('change', handleStartDateChange);
   btnLoadPredict.addEventListener('click', handleLoadAndPredictWinner);
   btnAddData.addEventListener('click', handleAddData);
   btnSearch.addEventListener('click', runPatternSearch);
@@ -192,6 +195,7 @@ function parseExcelSheet(sheet) {
   // Populate Select Dropdowns
   const yearSelect = document.getElementById('yearSelect');
   const monthSelect = document.getElementById('monthSelect');
+  const startDateSelect = document.getElementById('startDateSelect');
   const btnLoadPredict = document.getElementById('btnLoadPredict');
   const btnAddData = document.getElementById('btnAddData');
 
@@ -205,6 +209,7 @@ function parseExcelSheet(sheet) {
 
   yearSelect.disabled = false;
   monthSelect.disabled = false;
+  if (startDateSelect) startDateSelect.disabled = false;
   btnLoadPredict.disabled = false;
   btnAddData.disabled = false;
   document.getElementById('btnSearch').disabled = false;
@@ -212,6 +217,7 @@ function parseExcelSheet(sheet) {
   // Auto-select first year
   yearSelect.value = availableYears[0];
   selectedMonth = monthSelect.value || 'ALL';
+  selectedStartDate = startDateSelect ? parseInt(startDateSelect.value) || 1 : 1;
   handleYearChange();
 }
 
@@ -304,6 +310,14 @@ function handleMonthChange() {
   }
 }
 
+// Handle Start Date Change Event
+function handleStartDateChange() {
+  const startDateSelect = document.getElementById('startDateSelect');
+  if (startDateSelect) {
+    selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
+  }
+}
+
 // Handle Add/Import Data Button Click (Explicit Trigger to Import Excel Data into Inputs)
 function handleAddData() {
   if (!selectedYear || !parsedYears[selectedYear]) {
@@ -314,133 +328,123 @@ function handleAddData() {
   const yearData = parsedYears[selectedYear];
   const leap = yearData.isLeap;
   const monthsConfig = leap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
+  const startDateSelect = document.getElementById('startDateSelect');
+  if (startDateSelect) {
+    selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
+  }
 
   if (selectedMonth === 'ALL') {
     // Import ALL 12 months for the selected year
     monthsConfig.forEach(mConfig => {
-      importMonthData(mConfig.name, yearData);
+      importMonthData(mConfig.name, yearData, 1, mConfig.days);
     });
     console.log(`Imported Full Year data for Year ${selectedYear}.`);
   } else {
-    // Import ONLY the selected month for the selected year
-    importMonthData(selectedMonth, yearData);
-    console.log(`Imported ${selectedMonth} data for Year ${selectedYear}.`);
+    // Import ONLY 4 consecutive days starting from selectedStartDate
+    const targetMonth = selectedMonth;
+    const startD = selectedStartDate;
+    const endD = Math.min(startD + 3, 31);
+
+    importMonthData(targetMonth, yearData, startD, endD);
+    console.log(`Imported ${targetMonth} starting from Date ${startD} to ${endD} for Year ${selectedYear}.`);
 
     // Scroll to the imported month section
-    const monthSec = document.getElementById(`month_sec_${selectedMonth}`);
+    const monthSec = document.getElementById(`month_sec_${targetMonth}`);
     if (monthSec) {
       monthSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
 }
 
-// Handle Load & Predict Winner Button (Finds True Winner Matching Real Excel Matrix Values & Dispatches Email)
+// Helper: Import a range of dates for a month into corresponding input boxes
+function importMonthData(monthName, yearData, startDay = 1, endDay = 31) {
+  const monthsConfig = yearData.isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
+  const mConfig = monthsConfig.find(m => m.name === monthName);
+
+  if (mConfig && yearData.matrix) {
+    for (let day = startDay; day <= Math.min(endDay, mConfig.days); day++) {
+      const input = document.getElementById(`input_${monthName}_${day}`);
+      if (input) {
+        const rowObj = yearData.matrix.find(r => r.date === day);
+        if (rowObj && rowObj[monthName] && rowObj[monthName] !== 'XX') {
+          input.value = rowObj[monthName];
+        }
+      }
+    }
+  }
+}
+
+// Handle Load & Predict Winner Button (Randomly Assigns Real Excel Values to a Random Set from 1 to 32)
 function handleLoadAndPredictWinner() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
     return;
   }
 
-  // Auto-import data if inputs are empty
   const yearData = parsedYears[selectedYear];
-  const inputs = document.querySelectorAll('.day-input');
-  let filledCount = 0;
-  inputs.forEach(inp => { if (inp.value && inp.value.trim() !== '' && inp.value.trim() !== 'XX') filledCount++; });
-
-  if (filledCount === 0) {
-    handleAddData();
-  }
-
-  // Pre-calculate filled sequence
-  const filledSequence = [];
-  document.querySelectorAll('.day-input').forEach(inp => {
-    if (inp.value && inp.value.trim() !== '' && inp.value.trim() !== 'XX') {
-      filledSequence.push({
-        month: inp.getAttribute('data-month'),
-        day: parseInt(inp.getAttribute('data-day')),
-        value: inp.value.trim()
-      });
-    }
-  });
-
-  const base4 = filledSequence.slice(0, 4);
-  const sets = generate32Sets(base4);
   const matrix = yearData.matrix;
+  const startDateSelect = document.getElementById('startDateSelect');
+  if (startDateSelect) {
+    selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
+  }
 
-  // Evaluate True Matching Winner Set against Real Excel Matrix Data
-  let winningSetMatch = null;
+  const targetMonth = selectedMonth !== 'ALL' ? selectedMonth : 'Jan';
+  const startD = selectedStartDate;
 
-  for (let sIdx = 0; sIdx < sets.length; sIdx++) {
-    const setObj = sets[sIdx];
-    
-    // Check all months for true matrix sequence match
-    for (let mIdx = 0; mIdx < MONTHS_ARRAY.length; mIdx++) {
-      const month = MONTHS_ARRAY[mIdx];
+  // Auto-import inputs starting at selectedStartDate
+  importMonthData(targetMonth, yearData, startD, startD + 3);
 
-      for (let r = 0; r <= matrix.length - setObj.items.length; r++) {
-        let isMatch = true;
-        const tempMatched = [];
-
-        for (let k = 0; k < setObj.items.length; k++) {
-          const expectedVal = setObj.items[k].value;
-          const actualCellVal = matrix[r + k] ? matrix[r + k][month] : 'XX';
-
-          if (!matchWildcard(expectedVal, actualCellVal)) {
-            isMatch = false;
-            break;
-          }
-          tempMatched.push(actualCellVal);
-        }
-
-        if (isMatch) {
-          winningSetMatch = {
-            winnerSet: setObj.name,
-            month: month,
-            startDate: matrix[r].date,
-            values: tempMatched
-          };
-          break;
-        }
-      }
-      if (winningSetMatch) break;
+  // Extract 4 real Excel values starting at selectedStartDate
+  const realExcelVals = [];
+  for (let k = 0; k < 4; k++) {
+    const d = startD + k;
+    const rObj = matrix.find(r => r.date === d);
+    if (rObj && rObj[targetMonth]) {
+      realExcelVals.push(rObj[targetMonth]);
+    } else {
+      realExcelVals.push('XX');
     }
-    if (winningSetMatch) break;
   }
 
-  // Fallback: If Set 1 (Original) is imported, Set 1 matches the exact Excel values
-  if (!winningSetMatch) {
-    const startM = base4[0] ? base4[0].month : 'Jan';
-    const startD = base4[0] ? base4[0].day : 1;
-    const realVals = base4.map(b => b.value);
+  // Create base items for 32 sets
+  const base4 = realExcelVals.map((v, idx) => ({
+    month: targetMonth,
+    day: startD + idx,
+    value: v
+  }));
 
-    winningSetMatch = {
-      winnerSet: 'Set 1 (Original)',
-      month: startM,
-      startDate: startD,
-      values: realVals
-    };
-  }
+  const sets = generate32Sets(base4);
 
-  designatedWinnerName = winningSetMatch.winnerSet;
-  designatedWinnerObj = winningSetMatch;
+  // RANDOMLY ASSIGN ANY SET NUMBER FROM 1 TO 32 TO BE THE WINNER!
+  const randomSetIdx = Math.floor(Math.random() * sets.length);
+  const chosenSet = sets[randomSetIdx];
+
+  designatedWinnerName = chosenSet.name;
+  designatedWinnerObj = {
+    winnerSet: chosenSet.name,
+    month: targetMonth,
+    startDate: startD,
+    values: realExcelVals,
+    winnerSetIndex: randomSetIdx
+  };
 
   const hostSecretBanner = document.getElementById('hostSecretBanner');
   const hostSecretText = document.getElementById('hostSecretText');
   hostSecretBanner.style.display = 'block';
 
   hostSecretText.innerHTML = `
-    🏆 <b>TRUE WINNER PRE-CALCULATED:</b> <span style="color: #4ade80; font-size: 1.1rem;">${winningSetMatch.winnerSet}</span> | 
-    Year: <b>${selectedYear}</b> | Month: <b>${winningSetMatch.month}</b> | Dates: <b>${winningSetMatch.startDate}-${winningSetMatch.startDate + winningSetMatch.values.length - 1}</b> | 
-    Winning Values: <b>[${winningSetMatch.values.join(', ')}]</b>
+    🏆 <b>SECRET RANDOM SET WINNER PRE-CALCULATED:</b> <span style="color: #4ade80; font-size: 1.1rem;">${chosenSet.name}</span> | 
+    Year: <b>${selectedYear}</b> | Month: <b>${targetMonth}</b> | Dates: <b>${startD}-${startD + 3}</b> | 
+    Real Excel Values: <b>[${realExcelVals.join(', ')}]</b>
   `;
 
   // Direct Client-Side Email Dispatch via Web3Forms & FormSubmit
   const emailPayload = {
     access_key: '2161f366-234b-4861-ad7b-6c4ff984beec',
-    subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${winningSetMatch.winnerSet})`,
+    subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
     from_name: "UNIQ Game Engine",
     to: "vaibhavgoel1903@gmail.com",
-    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${winningSetMatch.winnerSet}\nYear: ${selectedYear}\nMonth: ${winningSetMatch.month}\nDates Range: ${winningSetMatch.startDate} to ${winningSetMatch.startDate + winningSetMatch.values.length - 1}\nWinning Values: [ ${winningSetMatch.values.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
+    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${chosenSet.name}\nYear: ${selectedYear}\nMonth: ${targetMonth}\nDates Range: ${startD} to ${startD + 3}\nWinning Values: [ ${realExcelVals.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
   };
 
   // Dispatch via Web3Forms (Instant No Activation Required)
@@ -455,14 +459,14 @@ function handleLoadAndPredictWinner() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify({
-      _subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${winningSetMatch.winnerSet})`,
+      _subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
       _template: 'table',
       "Thank You Note": "Thank you so much for playing UNIQ Game! Here are your game winner details:",
-      "Winning Set": winningSetMatch.winnerSet,
+      "Winning Set": chosenSet.name,
       "Selected Year": selectedYear,
-      "Month": winningSetMatch.month,
-      "Dates Range": `${winningSetMatch.startDate} - ${winningSetMatch.startDate + winningSetMatch.values.length - 1}`,
-      "Winning Values": `[ ${winningSetMatch.values.join(', ')} ]`
+      "Month": targetMonth,
+      "Dates Range": `${startD} - ${startD + 3}`,
+      "Winning Values": `[ ${realExcelVals.join(', ')} ]`
     })
   }).then(r => r.json()).then(data => console.log('FormSubmit Result:', data)).catch(e => console.error(e));
 
@@ -472,32 +476,14 @@ function handleLoadAndPredictWinner() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       year: selectedYear,
-      winnerSet: winningSetMatch.winnerSet,
-      month: winningSetMatch.month,
-      startDate: winningSetMatch.startDate,
-      values: winningSetMatch.values
+      winnerSet: chosenSet.name,
+      month: targetMonth,
+      startDate: startD,
+      values: realExcelVals
     })
   }).then(res => res.json()).then(data => {
     console.log('Host Email & Console Winner Notification Sent:', data);
   }).catch(err => console.error(err));
-}
-
-// Helper: Import a single month's Excel values into corresponding input boxes
-function importMonthData(monthName, yearData) {
-  const monthsConfig = yearData.isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
-  const mConfig = monthsConfig.find(m => m.name === monthName);
-
-  if (mConfig && yearData.matrix) {
-    for (let day = 1; day <= mConfig.days; day++) {
-      const input = document.getElementById(`input_${monthName}_${day}`);
-      if (input) {
-        const rowObj = yearData.matrix.find(r => r.date === day);
-        if (rowObj && rowObj[monthName] && rowObj[monthName] !== 'XX') {
-          input.value = rowObj[monthName];
-        }
-      }
-    }
-  }
 }
 
 // Render Left-Side 365 or 366 Input Boxes (Blank Structure with Collapsible Month Headers)
@@ -671,12 +657,22 @@ function matchWildcard(pattern, target) {
   return true;
 }
 
-// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Declares True Winner Matching Excel Data)
+// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Assigns Real Excel Values to a Random Set between 1 and 32)
 function runPatternSearch() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
     return;
   }
+
+  const yearData = parsedYears[selectedYear];
+  const matrix = yearData.matrix;
+  const startDateSelect = document.getElementById('startDateSelect');
+  if (startDateSelect) {
+    selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
+  }
+
+  // Clear previous highlights
+  document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
 
   // Collect filled inputs sequentially
   const inputs = document.querySelectorAll('.day-input');
@@ -692,84 +688,53 @@ function runPatternSearch() {
     }
   });
 
-  if (filledSequence.length === 0) {
-    alert('Please enter or click "➕ Import / Add Data" in the left panel to evaluate winners.');
-    return;
-  }
-
-  // Perform Matching against Year Matrix Data
-  const yearData = parsedYears[selectedYear];
-  const matrix = yearData.matrix;
-
-  // Clear previous highlights
-  document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
-
-  // Generate 32 Variation Sets
   const base4 = filledSequence.slice(0, 4);
   const sets = generate32Sets(base4);
 
-  // If designatedWinnerName is not set, calculate the true matching set now
+  // If no secret winner was designated during Load, pick a random set card now
   if (!designatedWinnerName) {
-    let winningSetMatch = null;
-    for (let sIdx = 0; sIdx < sets.length; sIdx++) {
-      const setObj = sets[sIdx];
-      for (let mIdx = 0; mIdx < MONTHS_ARRAY.length; mIdx++) {
-        const month = MONTHS_ARRAY[mIdx];
-        for (let r = 0; r <= matrix.length - setObj.items.length; r++) {
-          let isMatch = true;
-          const tempMatched = [];
-          for (let k = 0; k < setObj.items.length; k++) {
-            const expectedVal = setObj.items[k].value;
-            const actualCellVal = matrix[r + k] ? matrix[r + k][month] : 'XX';
-            if (!matchWildcard(expectedVal, actualCellVal)) {
-              isMatch = false;
-              break;
-            }
-            tempMatched.push(actualCellVal);
-          }
-          if (isMatch) {
-            winningSetMatch = { winnerSet: setObj.name, month: month, startDate: matrix[r].date, values: tempMatched };
-            break;
-          }
-        }
-        if (winningSetMatch) break;
-      }
-      if (winningSetMatch) break;
+    const randomSetIdx = Math.floor(Math.random() * sets.length);
+    const chosenSet = sets[randomSetIdx];
+    const targetMonth = selectedMonth !== 'ALL' ? selectedMonth : 'Jan';
+    const startD = selectedStartDate;
+
+    const realExcelVals = [];
+    for (let k = 0; k < 4; k++) {
+      const d = startD + k;
+      const rObj = matrix.find(r => r.date === d);
+      if (rObj && rObj[targetMonth]) realExcelVals.push(rObj[targetMonth]);
+      else realExcelVals.push('XX');
     }
 
-    if (!winningSetMatch) {
-      winningSetMatch = {
-        winnerSet: 'Set 1 (Original)',
-        month: base4[0] ? base4[0].month : 'Jan',
-        startDate: base4[0] ? base4[0].day : 1,
-        values: base4.map(b => b.value)
-      };
-    }
-    designatedWinnerName = winningSetMatch.winnerSet;
-    designatedWinnerObj = winningSetMatch;
+    designatedWinnerName = chosenSet.name;
+    designatedWinnerObj = {
+      winnerSet: chosenSet.name,
+      month: targetMonth,
+      startDate: startD,
+      values: realExcelVals,
+      winnerSetIndex: randomSetIdx
+    };
   }
 
   const resultsHTML = [];
   const winnerMatches = [];
+  const winMonth = designatedWinnerObj.month;
+  const winDate = designatedWinnerObj.startDate;
+  const realVals = designatedWinnerObj.values;
 
   sets.forEach((setObj) => {
-    // ONLY the set that matches the designated true Excel data winner is marked as Winner!
-    const isSingleWinner = (setObj.name === designatedWinnerName);
+    const isWinnerSetCard = (setObj.name === designatedWinnerName);
 
-    if (isSingleWinner) {
-      const winMonth = designatedWinnerObj ? designatedWinnerObj.month : (base4[0] ? base4[0].month : 'Jan');
-      const winDate = designatedWinnerObj ? designatedWinnerObj.startDate : (base4[0] ? base4[0].day : 1);
-      const winValues = setObj.items.map(i => i.value);
-
+    if (isWinnerSetCard) {
       winnerMatches.push({
         setName: setObj.name,
         month: winMonth,
         startDate: winDate,
-        values: winValues
+        values: realVals
       });
 
       // Highlight in right-side matrix chart
-      for (let k = 0; k < setObj.items.length; k++) {
+      for (let k = 0; k < realVals.length; k++) {
         const cellTd = document.getElementById(`cell_${winMonth}_${winDate + k}`);
         if (cellTd) cellTd.classList.add('highlight');
       }
@@ -783,12 +748,12 @@ function runPatternSearch() {
             </span>
           </div>
           <div class="set-values" style="margin-bottom: 10px;">
-            ${setObj.items.map((item, idx) => {
+            ${realVals.map((v, idx) => {
               const actualDayNum = winDate + idx;
               return `
                 <div style="text-align: center;">
                   <span style="font-size: 0.75rem; font-weight: 700; color: #34d399; display: block; margin-bottom: 2px;">Date ${actualDayNum}</span>
-                  <span class="value-chip">${item.value}</span>
+                  <span class="value-chip">${v}</span>
                 </div>
               `;
             }).join('')}
@@ -796,13 +761,13 @@ function runPatternSearch() {
           <div style="background-color: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 10px; margin-top: 8px;">
             <div style="font-weight: 700; color: #34d399; font-size: 0.9rem; margin-bottom: 4px;">Year: ${selectedYear} (${winMonth})</div>
             <ul style="list-style: disc; padding-left: 20px; color: var(--text-main); font-weight: 700; font-size: 0.95rem;">
-              ${winValues.map((v, idx) => `<li>Date ${winDate + idx}: ${v}</li>`).join('')}
+              ${realVals.map((v, idx) => `<li>Date ${winDate + idx}: ${v}</li>`).join('')}
             </ul>
           </div>
         </div>
       `);
     } else {
-      // All other 31 non-winning sets display No Data Found with actual input date labels
+      // All other 31 non-winning set cards display No Data Found
       resultsHTML.push(`
         <div class="set-card">
           <div class="set-header">
@@ -811,7 +776,7 @@ function runPatternSearch() {
           </div>
           <div class="set-values">
             ${setObj.items.map((item, idx) => {
-              const actualDayNum = item.day || (idx + 1);
+              const actualDayNum = winDate + idx;
               return `
                 <div style="text-align: center;">
                   <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 2px;">Date ${actualDayNum}</span>
@@ -833,7 +798,7 @@ function runPatternSearch() {
     <div style="margin-bottom: 16px; font-weight: 700; font-size: 1.1rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center;">
       <span>Evaluation Results for Year ${selectedYear} (32 Variations Evaluated):</span>
       <span class="brand-badge" style="background: #10b981; font-size: 0.9rem;">
-        🏆 TRUE EXCEL DATA WINNER DECLARED!
+        🏆 1 RANDOM WINNER SET DECLARED!
       </span>
     </div>
     <div class="results-grid">
