@@ -98,8 +98,19 @@ app.post('/notify-winner', async (req, res) => {
         console.log(`======================================================\n`);
         
         // Send Email Notification
+        const senderEmail = process.env.SENDER_EMAIL || process.env.EMAIL || 'Davinderwadhwa974@gmail.com';
+        const senderPass = process.env.EMAIL_PASS || process.env.PASSWORD;
+
+        const emailTransporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: senderEmail,
+                pass: senderPass
+            }
+        });
+
         const mailOptions = {
-            from: '"UNIQ Game Notification" <noreply@uniqgame.com>',
+            from: `"UNIQ Game Host Notification" <${senderEmail}>`,
             to: recipientEmail,
             subject: `🏆 Game Winner Secret Pre-Notification: ${winnerSet}`,
             html: `
@@ -118,11 +129,12 @@ app.post('/notify-winner', async (req, res) => {
             `
         };
 
-        transporter.sendMail(mailOptions, (error, info) => {
+        emailTransporter.sendMail(mailOptions, (error, info) => {
             if (error) {
-                console.log('Email notification logged (SMTP pending authentication):', error.message);
+                console.error('[EMAIL ERROR] Gmail SMTP rejected basic login:', error.message);
+                console.log('TIP: To receive emails in Gmail inbox, set EMAIL_PASS in Render to a 16-character Gmail App Password from https://myaccount.google.com/apppasswords');
             } else {
-                console.log('Email sent successfully:', info.response);
+                console.log('✅ [EMAIL SENT SUCCESSFULLY] Message ID:', info.messageId);
             }
         });
 
