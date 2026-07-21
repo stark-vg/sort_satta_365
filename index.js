@@ -116,28 +116,35 @@ app.post('/notify-winner', async (req, res) => {
             console.error('Web3Forms fetch error:', wErr.message);
         }
 
-        // 2. Send Email via FormSubmit Webhook API
-        try {
-            fetch(`https://formsubmit.co/ajax/50d6a47221bd136b05c64619ca58aa53`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    _subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${winnerSet})`,
-                    _template: 'table',
-                    "Thank You Note": "Thank you so much for playing UNIQ Game! Here are your game winner details:",
-                    "Designated Winner Set": winnerSet,
-                    "Year": year,
-                    "Month": month,
-                    "Dates Range": `${startDate} to ${Number(startDate) + (values ? values.length - 1 : 3)}`,
-                    "Winning Values": `[ ${values ? values.join(', ') : ''} ]`,
-                    "Timestamp": timestamp
-                })
-            }).then(r => r.json()).then(resData => {
-                console.log('✅ [FORMSUBMIT EMAIL DISPATCHED] Result:', resData);
-            }).catch(e => console.error('FormSubmit error:', e.message));
+        // 3. Send Telegram Push Notification if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are provided
+        const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+
+        if (telegramToken && telegramChatId) {
+            try {
+                const tgText = `🎉 *THANK YOU FOR PLAYING UNIQ GAME!* 🎉\n\n` +
+                    `🏆 *Winning Set:* \`${winnerSet}\`\n` +
+                    `📅 *Year:* ${year}\n` +
+                    `🗓️ *Month:* ${month}\n` +
+                    `📆 *Dates:* ${startDate} to ${Number(startDate) + (values ? values.length - 1 : 3)}\n` +
+                    `🔢 *Winning Values:* \`[ ${values ? values.join(', ') : ''} ]\`\n\n` +
+                    `Thank you for using UNIQ Game Engine!`;
+
+                fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: telegramChatId,
+                        text: tgText,
+                        parse_mode: 'Markdown'
+                    })
+                }).then(r => r.json()).then(resData => {
+                    console.log('✅ [TELEGRAM NOTIFICATION DISPATCHED] Result:', resData);
+                }).catch(e => console.error('Telegram error:', e.message));
+            } catch (tgErr) {
+                console.error('Telegram fetch error:', tgErr.message);
+            }
+        }
         } catch (fErr) {
             console.error('Fetch error:', fErr.message);
         }
