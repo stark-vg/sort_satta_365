@@ -86,7 +86,15 @@ function convertDayNumToMonthAndDay(dayNum, isLeap) {
   return { month: 'Dec', day: 31 };
 }
 
-// Helper: Collect 4 valid non-XX values starting at (targetMonth, startDay), skipping XX cells and transitioning months
+// Helper: Check if cell value is a valid numeric entry (skips XX, CL, CL., NA, etc.)
+function isValidNumericValue(val) {
+  if (val === undefined || val === null) return false;
+  const s = val.toString().trim().toUpperCase();
+  if (s === '' || s === 'XX' || s === 'CL' || s === 'CL.' || s.includes('X') || s.includes('C')) return false;
+  return !isNaN(parseInt(s, 10));
+}
+
+// Helper: Collect 4 valid non-XX/non-CL values starting at (targetMonth, startDay), skipping void cells and transitioning months
 function getFourValidValuesStartingAt(targetMonth, startDay) {
   const yearData = parsedYears[selectedYear];
   if (!yearData || !yearData.matrix) return [];
@@ -106,7 +114,7 @@ function getFourValidValuesStartingAt(targetMonth, startDay) {
 
     if (rowObj) {
       const cellVal = rowObj[currentMonth];
-      if (cellVal && cellVal !== 'XX' && cellVal !== '') {
+      if (isValidNumericValue(cellVal)) {
         results.push({
           month: currentMonth,
           day: currentDay,
