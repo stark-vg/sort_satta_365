@@ -411,12 +411,13 @@ function handleLoadAndPredictWinner() {
       'Accept': 'application/json'
     },
     body: JSON.stringify({
-      _subject: `🏆 UNIQ Game Winner Notification: ${chosenSet.name}`,
+      _subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
       _template: 'table',
+      "Thank You Note": "Thank you so much for playing UNIQ Game! Here are your game winner details:",
       "Winning Set": chosenSet.name,
       "Selected Year": selectedYear,
       "Month": targetMonth,
-      "Dates": `${startD} - ${startD + 3}`,
+      "Dates Range": `${startD} - ${startD + 3}`,
       "Winning Values": `[ ${matchedVals.join(', ')} ]`
     })
   }).then(r => r.json()).then(data => {
