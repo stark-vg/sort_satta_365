@@ -1,0 +1,693 @@
+// Global State
+let parsedYears = {}; // Stores year -> { rows: [{ date: 1, Jan: 21, ... }], isLeap: boolean }
+let selectedYear = null;
+let selectedMonth = 'ALL';
+let currentTab = 'chart';
+let isPanelCollapsed = false;
+
+const MONTH_DAYS_NORMAL = [
+  { name: 'Jan', days: 31 },
+  { name: 'Feb', days: 28 },
+  { name: 'Mar', days: 31 },
+  { name: 'Apr', days: 30 },
+  { name: 'May', days: 31 },
+  { name: 'Jun', days: 30 },
+  { name: 'Jul', days: 31 },
+  { name: 'Aug', days: 31 },
+  { name: 'Sep', days: 30 },
+  { name: 'Oct', days: 31 },
+  { name: 'Nov', days: 30 },
+  { name: 'Dec', days: 31 }
+];
+
+const MONTH_DAYS_LEAP = [
+  { name: 'Jan', days: 31 },
+  { name: 'Feb', days: 29 },
+  { name: 'Mar', days: 31 },
+  { name: 'Apr', days: 30 },
+  { name: 'May', days: 31 },
+  { name: 'Jun', days: 30 },
+  { name: 'Jul', days: 31 },
+  { name: 'Aug', days: 31 },
+  { name: 'Sep', days: 30 },
+  { name: 'Oct', days: 31 },
+  { name: 'Nov', days: 30 },
+  { name: 'Dec', days: 31 }
+];
+
+const MONTHS_ARRAY = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+
+// Helper: Check if year is a leap year
+function isLeapYear(year) {
+  const y = parseInt(year, 10);
+  if (isNaN(y)) return false;
+  return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0);
+}
+
+// Switch UI Tabs
+function switchTab(tabName) {
+  currentTab = tabName;
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+  if (tabName === 'chart') {
+    document.getElementById('tabBtnChart').classList.add('active');
+    document.getElementById('tabChart').classList.add('active');
+  } else {
+    document.getElementById('tabBtnResults').classList.add('active');
+    document.getElementById('tabResults').classList.add('active');
+  }
+}
+
+// Initialize Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  const fileUpload = document.getElementById('fileUpload');
+  const yearSelect = document.getElementById('yearSelect');
+  const monthSelect = document.getElementById('monthSelect');
+  const btnSearch = document.getElementById('btnSearch');
+  const btnReset = document.getElementById('btnReset');
+  const btnFillSample = document.getElementById('btnFillSample');
+  const btnTogglePanel = document.getElementById('btnTogglePanel');
+
+  fileUpload.addEventListener('change', handleFileUpload);
+  yearSelect.addEventListener('change', handleYearChange);
+  monthSelect.addEventListener('change', handleMonthChange);
+  btnSearch.addEventListener('click', runPatternSearch);
+  btnReset.addEventListener('click', resetAllInputs);
+  btnFillSample.addEventListener('click', reloadExcelValues);
+  
+  if (btnTogglePanel) {
+    btnTogglePanel.addEventListener('click', toggleLeftPanel);
+  }
+});
+
+// Toggle Left Panel (Collapse / Expand UI)
+function toggleLeftPanel() {
+  const mainContainer = document.getElementById('mainContainer');
+  const leftPanel = document.getElementById('leftPanel');
+  const btnTogglePanel = document.getElementById('btnTogglePanel');
+
+  isPanelCollapsed = !isPanelCollapsed;
+
+  if (isPanelCollapsed) {
+    mainContainer.classList.add('collapsed');
+    leftPanel.classList.add('collapsed');
+    btnTogglePanel.textContent = '▶ Expand';
+  } else {
+    mainContainer.classList.remove('collapsed');
+    leftPanel.classList.remove('collapsed');
+    btnTogglePanel.textContent = '◀ Collapse';
+  }
+}
+
+// Handle File Upload
+function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  document.getElementById('fileNameLabel').textContent = `📄 ${file.name}`;
+  const reader = new FileReader();
+
+  reader.onload = function (event) {
+    try {
+      const data = new Uint8Array(event.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+
+      parseExcelSheet(sheet);
+    } catch (err) {
+      console.error('Error parsing excel:', err);
+      alert('Failed to parse Excel file. Please check file format.');
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+// Parse Excel Sheet with Dynamic Header Column Detection
+function parseExcelSheet(sheet) {
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  parsedYears = {};
+
+  let currentYear = null;
+  let headerRow = null;
+  let yearRows = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+
+    const val = row[0];
+    // Year Header row detection (e.g. 1966, 1986, 2021)
+    if (typeof val === 'number' && val >= 1900 && val <= 2100) {
+      if (currentYear !== null && yearRows.length > 0) {
+        parsedYears[currentYear] = processYearRows(currentYear, yearRows, headerRow);
+      }
+      currentYear = val;
+      headerRow = row;
+      yearRows = [];
+    } else if (currentYear !== null) {
+      // Data row for current year
+      if (typeof val === 'number' && val >= 1 && val <= 31) {
+        yearRows.push(row);
+      }
+    }
+  }
+
+  // Save last year block
+  if (currentYear !== null && yearRows.length > 0) {
+    parsedYears[currentYear] = processYearRows(currentYear, yearRows, headerRow);
+  }
+
+  const availableYears = Object.keys(parsedYears).sort((a, b) => parseInt(a) - parseInt(b));
+
+  if (availableYears.length === 0) {
+    alert('No valid year data blocks found in Excel sheet.');
+    return;
+  }
+
+  // Populate Select Dropdowns
+  const yearSelect = document.getElementById('yearSelect');
+  const monthSelect = document.getElementById('monthSelect');
+
+  yearSelect.innerHTML = '';
+  availableYears.forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = `Year ${y} ${isLeapYear(y) ? '(Leap Year)' : ''}`;
+    yearSelect.appendChild(opt);
+  });
+
+  yearSelect.disabled = false;
+  monthSelect.disabled = false;
+  document.getElementById('btnSearch').disabled = false;
+
+  // Auto-select first year
+  yearSelect.value = availableYears[0];
+  selectedMonth = monthSelect.value || 'ALL';
+  handleYearChange();
+}
+
+// Process Data Rows for a Single Year using Dynamic Header Column Indices
+function processYearRows(year, rows, headerRow) {
+  const matrix = [];
+  const leap = isLeapYear(year);
+
+  // Default fallback column indices
+  const colIndices = {
+    Jan: 3, Feb: 7, Mar: 10, Apr: 15, May: 20, Jun: 25,
+    Jul: 30, Aug: 33, Sep: 36, Oct: 41, Nov: 45, Dec: 48
+  };
+
+  // DYNAMIC HEADER DETECTION: Scan header row for exact month column positions
+  if (headerRow && Array.isArray(headerRow)) {
+    headerRow.forEach((cellVal, colIdx) => {
+      if (cellVal && typeof cellVal === 'string') {
+        const cleanVal = cellVal.trim();
+        MONTHS_ARRAY.forEach(m => {
+          if (cleanVal.toLowerCase().includes(m.toLowerCase())) {
+            colIndices[m] = colIdx;
+          }
+        });
+      }
+    });
+  }
+
+  rows.forEach(r => {
+    const dateNum = r[0];
+    const rowData = { date: dateNum };
+
+    MONTHS_ARRAY.forEach((m) => {
+      const colIdx = colIndices[m];
+      let cellVal = r[colIdx] !== undefined && r[colIdx] !== null ? r[colIdx] : 'XX';
+      if (typeof cellVal === 'number' && cellVal < 10) {
+        cellVal = '0' + cellVal;
+      }
+      rowData[m] = cellVal.toString();
+    });
+
+    matrix.push(rowData);
+  });
+
+  return {
+    year: year,
+    isLeap: leap,
+    matrix: matrix
+  };
+}
+
+// Handle Year Change Event
+function handleYearChange() {
+  const yearSelect = document.getElementById('yearSelect');
+  selectedYear = yearSelect.value;
+  if (!selectedYear || !parsedYears[selectedYear]) return;
+
+  const yearData = parsedYears[selectedYear];
+  const leap = yearData.isLeap;
+
+  // Update Leap Indicator Badge
+  const leapIndicator = document.getElementById('leapIndicator');
+  const inputCountBadge = document.getElementById('inputCountBadge');
+
+  if (leap) {
+    leapIndicator.className = 'leap-badge leap';
+    leapIndicator.innerHTML = '<span>⚡ Leap Year (366 Days)</span>';
+    inputCountBadge.textContent = '366 Days';
+  } else {
+    leapIndicator.className = 'leap-badge normal';
+    leapIndicator.innerHTML = '<span>📅 Normal Year (365 Days)</span>';
+    inputCountBadge.textContent = '365 Days';
+  }
+
+  // Render Left Side Inputs & Right Side Chart Matrix
+  renderLeftInputs(leap, yearData, selectedMonth);
+  renderRightMatrix(yearData);
+
+  // Reset Winner status banner until search is triggered
+  updateWinnerSummary(null);
+}
+
+// Handle Month Change Event
+function handleMonthChange() {
+  const monthSelect = document.getElementById('monthSelect');
+  selectedMonth = monthSelect.value || 'ALL';
+
+  if (!selectedYear || !parsedYears[selectedYear]) return;
+
+  const yearData = parsedYears[selectedYear];
+  // Import/fill values for selected month (or ALL)
+  renderLeftInputs(yearData.isLeap, yearData, selectedMonth);
+
+  // Scroll to selected month section if specific month selected
+  if (selectedMonth !== 'ALL') {
+    const monthSec = document.getElementById(`month_sec_${selectedMonth}`);
+    if (monthSec) {
+      monthSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+}
+
+// Render Left-Side 365 or 366 Input Boxes populated with Year & Month Data from Excel
+function renderLeftInputs(isLeap, yearData, targetMonth = 'ALL') {
+  const container = document.getElementById('inputsScrollArea');
+  container.innerHTML = '';
+
+  const monthsConfig = isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
+  let totalInputCount = 0;
+
+  monthsConfig.forEach(mConfig => {
+    const monthSec = document.createElement('div');
+    monthSec.className = 'month-section';
+    monthSec.id = `month_sec_${mConfig.name}`;
+
+    const header = document.createElement('div');
+    header.className = 'month-header';
+    header.innerHTML = `<span>${mConfig.name}</span><span>${mConfig.days} Days</span>`;
+    monthSec.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'date-grid';
+
+    for (let day = 1; day <= mConfig.days; day++) {
+      totalInputCount++;
+      const group = document.createElement('div');
+      group.className = 'date-input-group';
+
+      const label = document.createElement('span');
+      label.className = 'date-label';
+      label.textContent = `${mConfig.name} ${day < 10 ? '0' + day : day}`;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'date-field day-input';
+      input.maxLength = 2;
+      input.placeholder = 'XX';
+      input.id = `input_${mConfig.name}_${day}`;
+      input.setAttribute('data-month', mConfig.name);
+      input.setAttribute('data-day', day);
+
+      // Extract value from Excel matrix if targetMonth is ALL or matches mConfig.name
+      if (yearData && yearData.matrix && (targetMonth === 'ALL' || targetMonth === mConfig.name)) {
+        const rowObj = yearData.matrix.find(r => r.date === day);
+        if (rowObj && rowObj[mConfig.name] && rowObj[mConfig.name] !== 'XX') {
+          input.value = rowObj[mConfig.name];
+        }
+      }
+
+      input.addEventListener('input', (e) => {
+        if (e.target.value.length > 2) {
+          e.target.value = e.target.value.slice(0, 2);
+        }
+      });
+
+      group.appendChild(label);
+      group.appendChild(input);
+      grid.appendChild(group);
+    }
+
+    monthSec.appendChild(grid);
+    container.appendChild(monthSec);
+  });
+}
+
+// Render Right-Side Interactive Year Matrix Chart
+function renderRightMatrix(yearData) {
+  const container = document.getElementById('matrixContainer');
+  container.innerHTML = '';
+
+  const table = document.createElement('table');
+  table.className = 'matrix-table';
+
+  // Table Header
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+
+  const thDate = document.createElement('th');
+  thDate.textContent = 'Date';
+  headRow.appendChild(thDate);
+
+  MONTHS_ARRAY.forEach(m => {
+    const th = document.createElement('th');
+    th.textContent = m;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  // Table Body
+  const tbody = document.createElement('tbody');
+  yearData.matrix.forEach(r => {
+    const tr = document.createElement('tr');
+
+    const tdDate = document.createElement('td');
+    tdDate.className = 'date-col';
+    tdDate.textContent = r.date;
+    tr.appendChild(tdDate);
+
+    MONTHS_ARRAY.forEach(m => {
+      const td = document.createElement('td');
+      td.id = `cell_${m}_${r.date}`;
+      td.textContent = r[m] || 'XX';
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+// Reload Excel Values for Selected Month (or All Months)
+function reloadExcelValues() {
+  if (selectedYear && parsedYears[selectedYear]) {
+    const yearData = parsedYears[selectedYear];
+
+    if (selectedMonth === 'ALL') {
+      renderLeftInputs(yearData.isLeap, yearData, 'ALL');
+    } else {
+      // Reload values ONLY for the selected month
+      const monthsConfig = yearData.isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
+      const mConfig = monthsConfig.find(m => m.name === selectedMonth);
+
+      if (mConfig) {
+        for (let day = 1; day <= mConfig.days; day++) {
+          const input = document.getElementById(`input_${selectedMonth}_${day}`);
+          if (input) {
+            const rowObj = yearData.matrix.find(r => r.date === day);
+            input.value = (rowObj && rowObj[selectedMonth] && rowObj[selectedMonth] !== 'XX') ? rowObj[selectedMonth] : '';
+          }
+        }
+      }
+    }
+  }
+}
+
+// Reset Input Fields for Selected Month (or All Months)
+function resetAllInputs() {
+  if (selectedMonth === 'ALL') {
+    document.querySelectorAll('.day-input').forEach(input => input.value = '');
+  } else {
+    // Reset ONLY selected month inputs
+    document.querySelectorAll(`.day-input[data-month="${selectedMonth}"]`).forEach(input => input.value = '');
+  }
+
+  document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
+  updateWinnerSummary(null);
+
+  document.getElementById('resultsContainer').innerHTML = `
+    <p style="padding: 40px; text-align: center; color: var(--text-muted);">
+      Inputs reset for ${selectedMonth === 'ALL' ? 'Full Year' : selectedMonth}. Click <b>🚀 Start Search</b> to evaluate.
+    </p>`;
+}
+
+// Update Top Winner Summary Banner
+function updateWinnerSummary(winnerMatches) {
+  const winnerStatusBadge = document.getElementById('winnerStatusBadge');
+  const winnerDetailsText = document.getElementById('winnerDetailsText');
+
+  if (!winnerMatches || winnerMatches.length === 0) {
+    winnerStatusBadge.style.backgroundColor = '#334155';
+    winnerStatusBadge.style.color = '#94a3b8';
+    winnerStatusBadge.textContent = 'Awaiting Search';
+    winnerDetailsText.textContent = 'Click "Start Search" to evaluate 32 sets against year matrix.';
+    return;
+  }
+
+  const firstWin = winnerMatches[0];
+  winnerStatusBadge.style.backgroundColor = '#10b981';
+  winnerStatusBadge.style.color = '#ffffff';
+  winnerStatusBadge.textContent = `🏆 WINNER: ${firstWin.setName}`;
+
+  winnerDetailsText.innerHTML = `
+    Year: <b>${selectedYear}</b> | Month: <b>${firstWin.month}</b> | Date: <b>${firstWin.startDate}</b> | 
+    Values: <b>[${firstWin.values.join(', ')}]</b>
+  `;
+}
+
+// Compare two values with wildcard (?) support
+function matchWildcard(pattern, target) {
+  if (!pattern || !target) return false;
+  pattern = pattern.toString().padStart(2, '0');
+  target = target.toString().padStart(2, '0');
+
+  if (pattern.length !== target.length) return false;
+
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] !== '?' && pattern[i] !== target[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Run Optimized Pattern Search Engine (Evaluates 32 Sets)
+function runPatternSearch() {
+  if (!selectedYear || !parsedYears[selectedYear]) {
+    alert('Please upload an Excel file and select a Year first.');
+    return;
+  }
+
+  // Collect filled inputs sequentially
+  const inputs = document.querySelectorAll('.day-input');
+  const filledSequence = [];
+
+  inputs.forEach(inp => {
+    if (inp.value && inp.value.trim() !== '' && inp.value.trim() !== 'XX') {
+      filledSequence.push({
+        month: inp.getAttribute('data-month'),
+        day: parseInt(inp.getAttribute('data-day')),
+        value: inp.value.trim()
+      });
+    }
+  });
+
+  if (filledSequence.length === 0) {
+    alert('Please enter or import at least 1 date value in the left panel to evaluate winners.');
+    return;
+  }
+
+  // Perform Matching against Year Matrix Data
+  const yearData = parsedYears[selectedYear];
+  const matrix = yearData.matrix;
+
+  // Clear previous highlights
+  document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
+
+  // Generate 32 Variation Sets
+  const base4 = filledSequence.slice(0, 4);
+  const sets = generate32Sets(base4);
+
+  const resultsHTML = [];
+  const winnerMatches = [];
+
+  sets.forEach((setObj) => {
+    let matchFound = false;
+    let matchedMonth = '';
+    let matchedStartRow = -1;
+    let matchedValues = [];
+
+    // Search for sequence match in matrix across all months
+    MONTHS_ARRAY.forEach(month => {
+      for (let r = 0; r <= matrix.length - setObj.items.length; r++) {
+        let isMatch = true;
+        const tempMatched = [];
+
+        for (let k = 0; k < setObj.items.length; k++) {
+          const expectedVal = setObj.items[k].value;
+          const actualCellVal = matrix[r + k][month];
+
+          if (!matchWildcard(expectedVal, actualCellVal)) {
+            isMatch = false;
+            break;
+          }
+          tempMatched.push(actualCellVal);
+        }
+
+        if (isMatch) {
+          matchFound = true;
+          matchedMonth = month;
+          matchedStartRow = matrix[r].date;
+          matchedValues = tempMatched;
+
+          winnerMatches.push({
+            setName: setObj.name,
+            month: matchedMonth,
+            startDate: matchedStartRow,
+            values: matchedValues
+          });
+
+          // Highlight in right-side matrix chart
+          for (let k = 0; k < setObj.items.length; k++) {
+            const cellTd = document.getElementById(`cell_${month}_${matrix[r + k].date}`);
+            if (cellTd) cellTd.classList.add('highlight');
+          }
+          break;
+        }
+      }
+    });
+
+    // Build Set Card HTML matching screenshot layout
+    resultsHTML.push(`
+      <div class="set-card" style="${matchFound ? 'border: 2px solid #10b981; background-color: #172554;' : ''}">
+        <div class="set-header">
+          <span class="set-name">${setObj.name}</span>
+          <span class="${matchFound ? 'match-found' : 'match-none'}">
+            ${matchFound ? `🏆 WINNER MATCH (${matchedMonth}, Date ${matchedStartRow})` : 'No Data Found'}
+          </span>
+        </div>
+        <div class="set-values" style="margin-bottom: 10px;">
+          ${setObj.items.map(item => `
+            <div style="text-align: center;">
+              <span style="font-size: 0.7rem; color: var(--text-muted); display: block;">${item.day}</span>
+              <span class="value-chip">${item.value}</span>
+            </div>
+          `).join('')}
+        </div>
+        ${matchFound ? `
+          <div style="background-color: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 10px; margin-top: 8px;">
+            <div style="font-weight: 700; color: #34d399; font-size: 0.9rem; margin-bottom: 4px;">Year: ${selectedYear} (${matchedMonth})</div>
+            <ul style="list-style: disc; padding-left: 20px; color: var(--text-main); font-weight: 700; font-size: 0.95rem;">
+              ${matchedValues.map(v => `<li>${v}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+      </div>
+    `);
+  });
+
+  // Update Top Winner Banner
+  updateWinnerSummary(winnerMatches);
+
+  // Render Results Container & Switch Tab
+  document.getElementById('resultsContainer').innerHTML = `
+    <div style="margin-bottom: 16px; font-weight: 700; font-size: 1.1rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center;">
+      <span>Evaluation Results for Year ${selectedYear} (${sets.length} Variations Evaluated):</span>
+      <span class="brand-badge" style="background: ${winnerMatches.length > 0 ? '#10b981' : '#ef4444'}; font-size: 0.9rem;">
+        ${winnerMatches.length > 0 ? `🏆 ${winnerMatches.length} Winner Set(s) Found!` : '❌ No Winner Match Found'}
+      </span>
+    </div>
+    <div class="results-grid">
+      ${resultsHTML.join('')}
+    </div>
+  `;
+
+  switchTab('results');
+}
+
+// Generate EXACT 32 Variation Sets
+function generate32Sets(baseItems) {
+  if (baseItems.length === 0) return [];
+
+  const sets = [];
+  const vals = baseItems.map(b => b.value);
+
+  // Helper to reverse 2-digit string
+  const rev = (s) => (s ? s.toString().padStart(2, '0').split('').reverse().join('') : '00');
+
+  const v0 = vals[0] || '00';
+  const v1 = vals[1] || '00';
+  const v2 = vals[2] || '00';
+  const v3 = vals[3] || '00';
+
+  const r0 = rev(v0);
+  const r1 = rev(v1);
+  const r2 = rev(v2);
+  const r3 = rev(v3);
+
+  // List of 32 distinct set variations
+  const setVariations = [
+    { name: 'Set 1 (Original)', vals: [v0, v1, v2, v3] },
+    { name: 'Set 2 (Val 1 Rev)', vals: [r0, v1, v2, v3] },
+    { name: 'Set 3 (Val 3-4 Swap)', vals: [v0, v1, v3, v2] },
+    { name: 'Set 4 (Val 1 Rev + 3-4 Swap)', vals: [r0, v1, v3, v2] },
+    { name: 'Set 5 (All Rev)', vals: [r0, r1, r2, r3] },
+    { name: 'Set 6 (Val 2,3,4 Rev)', vals: [v0, r1, r2, r3] },
+    { name: 'Set 7 (All Rev + 3-4 Swap)', vals: [r0, r1, r3, r2] },
+    { name: 'Set 8 (Val 2,3,4 Rev + Swap)', vals: [v0, r1, r3, r2] },
+    
+    { name: 'Set 9 (Val 1-2 Swap)', vals: [v1, v0, v2, v3] },
+    { name: 'Set 10 (Val 1-2 Swap + Rev)', vals: [r1, r0, v2, v3] },
+    { name: 'Set 11 (Val 1-2 & 3-4 Swap)', vals: [v1, v0, v3, v2] },
+    { name: 'Set 12 (Val 1-2 & 3-4 Swap + Rev)', vals: [r1, r0, r3, r2] },
+    { name: 'Set 13 (Val 2-3 Swap)', vals: [v0, v2, v1, v3] },
+    { name: 'Set 14 (Val 2-3 Swap + Rev)', vals: [r0, r2, r1, r3] },
+    { name: 'Set 15 (Val 2-3 & 3-4 Swap)', vals: [v0, v2, v3, v1] },
+    { name: 'Set 16 (Val 2-3 & 3-4 Swap + Rev)', vals: [r0, r2, r3, r1] },
+
+    { name: 'Set 17 (Reverse Order)', vals: [v3, v2, v1, v0] },
+    { name: 'Set 18 (Reverse Order + Rev)', vals: [r3, r2, r1, r0] },
+    { name: 'Set 19 (Rev Order 3-4 Swap)', vals: [v3, v2, v0, v1] },
+    { name: 'Set 20 (Rev Order 3-4 Swap + Rev)', vals: [r3, r2, r0, r1] },
+    { name: 'Set 21 (Cross Swap 1-3)', vals: [v2, v3, v0, v1] },
+    { name: 'Set 22 (Cross Swap 1-3 + Rev)', vals: [r2, r3, r0, r1] },
+    { name: 'Set 23 (Cross Swap 1-3 & 2-4)', vals: [v2, v3, v1, v0] },
+    { name: 'Set 24 (Cross Swap 1-3 & 2-4 + Rev)', vals: [r2, r3, r1, r0] },
+
+    { name: 'Set 25 (Alt Rev 1 & 3)', vals: [r0, v1, r2, v3] },
+    { name: 'Set 26 (Alt Rev 2 & 4)', vals: [v0, r1, v2, r3] },
+    { name: 'Set 27 (Head Rev 1 & 2)', vals: [r0, r1, v2, v3] },
+    { name: 'Set 28 (Tail Rev 3 & 4)', vals: [v0, v1, r2, r3] },
+    { name: 'Set 29 (Swap 1-2 Alt Rev)', vals: [r1, v0, r3, v2] },
+    { name: 'Set 30 (Swap 1-2 Alt Rev 2)', vals: [v1, r0, v3, r2] },
+    { name: 'Set 31 (Swap 2-3 Alt Rev)', vals: [r2, v1, r0, v3] },
+    { name: 'Set 32 (Swap 2-3 Alt Rev 2)', vals: [v2, r1, v0, r3] }
+  ];
+
+  setVariations.forEach(v => {
+    const items = baseItems.map((b, idx) => ({
+      ...b,
+      value: v.vals[idx] || b.value
+    }));
+    sets.push({
+      name: v.name,
+      items: items
+    });
+  });
+
+  return sets;
+}

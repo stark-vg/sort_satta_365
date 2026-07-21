@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - 365/366 Satta Engine</title>
+  <style>
+    body {
+      background-color: #0f172a;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      height: 100vh;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #f8fafc;
+    }
+    .form-card {
+      width: 100%;
+      max-width: 400px;
+      padding: 32px;
+      background-color: #1e293b;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 24px;
+      font-size: 1.5rem;
+      color: #10b981;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 0.875rem;
+      color: #94a3b8;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background-color: #0f172a;
+      color: #fff;
+      box-sizing: border-box;
+      outline: none;
+    }
+    .form-group input:focus {
+      border-color: #10b981;
+    }
+    .form-group button {
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      border-radius: 6px;
+      background-color: #10b981;
+      color: #ffffff;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    .form-group button:hover {
+      background-color: #059669;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-card">
+    <h2>UNIQ Game</h2>
+    <p style="text-align: center; color: #94a3b8; margin-bottom: 20px; font-size: 0.9rem;">365 / 366 Days Analysis Engine</p>
+    <form action="/login" method="post"> 
+      <div class="form-group">
+        <label for="username">Username Email</label>
+        <input type="text" id="username" name="username" required>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+      <div class="form-group">
+        <button type="submit">Login</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

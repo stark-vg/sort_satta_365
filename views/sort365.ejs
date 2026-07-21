@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <title>UNIQ Game - 365/366 Days Analysis Engine</title>
+
+  <!-- SheetJS Library for Excel Parsing -->
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/css/sort365.css">
+</head>
+
+<body>
+
+  <!-- Top Navbar -->
+  <nav class="navbar">
+    <div class="brand-title">
+      <span>UNIQ Game</span>
+      <span class="brand-badge">365/366 Days Engine</span>
+    </div>
+    <div class="nav-actions">
+      <a href="/logout" class="btn btn-warning">Logout</a>
+    </div>
+  </nav>
+
+  <!-- Toolbar Controls -->
+  <div class="toolbar">
+    <div class="control-group">
+
+      <div class="control-item">
+        <label for="fileUpload">Excel File</label>
+        <div class="file-input-wrapper">
+          <label class="file-input-btn" for="fileUpload" id="fileNameLabel">📁 Choose Excel File</label>
+          <input type="file" id="fileUpload" accept=".xlsx, .xls" />
+        </div>
+      </div>
+
+      <div class="control-item">
+        <label for="yearSelect">Select Year</label>
+        <select id="yearSelect" class="select-input" disabled>
+          <option value="">Upload Excel First</option>
+        </select>
+      </div>
+
+      <div class="control-item">
+        <label for="monthSelect">Select Month</label>
+        <select id="monthSelect" class="select-input" disabled>
+          <option value="ALL">All Months (Full Year)</option>
+          <option value="Jan">Jan (January)</option>
+          <option value="Feb">Feb (February)</option>
+          <option value="Mar">Mar (March)</option>
+          <option value="Apr">Apr (April)</option>
+          <option value="May">May (May)</option>
+          <option value="Jun">Jun (June)</option>
+          <option value="Jul">Jul (July)</option>
+          <option value="Aug">Aug (August)</option>
+          <option value="Sep">Sep (September)</option>
+          <option value="Oct">Oct (October)</option>
+          <option value="Nov">Nov (November)</option>
+          <option value="Dec">Dec (December)</option>
+        </select>
+      </div>
+
+      <div class="control-item">
+        <label>Year Type</label>
+        <div id="leapIndicator" class="leap-badge normal">
+          <span>📅 Normal Year (365 Days)</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="control-group">
+      <button type="button" class="btn btn-primary" id="btnSearch" disabled>🚀 Start Search (32 Sets)</button>
+      <button type="button" class="btn btn-outline" id="btnReset">🔄 Reset Inputs</button>
+      <button type="button" class="btn btn-outline" id="btnFillSample">⚡ Reload Excel Values</button>
+    </div>
+  </div>
+
+  <!-- Main Split Layout -->
+  <div class="main-container" id="mainContainer">
+
+    <!-- Left Panel: 365/366 Date Input Boxes -->
+    <div class="left-panel" id="leftPanel">
+      <div class="panel-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="panel-title">📅 Date Input Entries</span>
+          <span id="inputCountBadge" class="brand-badge">365 Days</span>
+        </div>
+        <button type="button" class="btn btn-outline" id="btnTogglePanel" title="Minimize / Expand Inputs Panel" style="padding: 2px 8px; font-size: 0.75rem;">◀ Collapse</button>
+      </div>
+      <div class="inputs-scroll-area" id="inputsScrollArea">
+        <!-- Rendered dynamically by sort365.js -->
+      </div>
+    </div>
+
+    <!-- Right Panel: Year Matrix Chart & Search Results -->
+    <div class="right-panel">
+
+      <!-- Winner Summary Header Banner -->
+      <div id="winnerSummaryBanner" style="padding: 10px 16px; background-color: var(--panel-bg); border-bottom: 1px solid var(--panel-border); display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-weight: 700; font-size: 0.9rem; color: var(--text-muted);">🏆 Winner Set Status:</span>
+          <span id="winnerStatusBadge" class="brand-badge" style="background-color: #334155; color: #94a3b8;">Awaiting Search</span>
+        </div>
+        <div id="winnerDetailsText" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">
+          Click "Start Search" to evaluate 32 sets against year matrix.
+        </div>
+      </div>
+
+      <div class="tabs-bar">
+        <button class="tab-btn active" id="tabBtnChart" onclick="switchTab('chart')">📊 Selected Year Matrix</button>
+        <button class="tab-btn" id="tabBtnResults" onclick="switchTab('results')">🎯 Search Results (32 Sets)</button>
+      </div>
+
+      <!-- Tab 1: Excel Matrix View -->
+      <div class="tab-content active" id="tabChart">
+        <div class="matrix-container" id="matrixContainer">
+          <p style="padding: 40px; text-align: center; color: var(--text-muted);">
+            Please upload your Excel file and select a Year to view the interactive matrix chart.
+          </p>
+        </div>
+      </div>
+
+      <!-- Tab 2: Pattern Search Results -->
+      <div class="tab-content" id="tabResults">
+        <div id="resultsContainer">
+          <p style="padding: 40px; text-align: center; color: var(--text-muted);">
+            No search performed yet. Upload Excel, select a year/month, and click <b>🚀 Start Search</b>.
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="/js/sort365.js"></script>
+</body>
+
+</html>
