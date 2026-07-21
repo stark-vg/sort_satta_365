@@ -72,22 +72,66 @@ app.get('/logout', async (req, res) => {
     }
 });
 
+const nodemailer = require('nodemailer');
+
+// Setup Email Transporter (uses environment config if SMTP parameters are set, with fallback test account)
+let transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL || 'Davinderwadhwa974@gmail.com',
+        pass: process.env.EMAIL_PASS || process.env.PASSWORD
+    }
+});
+
 app.post('/notify-winner', async (req, res) => {
     try {
         const { year, winnerSet, month, startDate, values } = req.body;
         const timestamp = new Date().toLocaleString();
+        const recipientEmail = process.env.EMAIL || 'Davinderwadhwa974@gmail.com';
         
         console.log(`\n======================================================`);
         console.log(`[HOST GAME WINNER NOTIFICATION] - ${timestamp}`);
-        console.log(`Year: ${year} | Winner: ${winnerSet}`);
-        console.log(`Match Location: ${month}, Date ${startDate}`);
+        console.log(`Recipient: ${recipientEmail}`);
+        console.log(`Year: ${year} | Exclusive Winner: ${winnerSet}`);
+        console.log(`Match Location: ${month}, Dates ${startDate}-${Number(startDate) + (values ? values.length - 1 : 3)}`);
         console.log(`Winning Values: [${values ? values.join(', ') : ''}]`);
         console.log(`======================================================\n`);
         
+        // Send Email Notification
+        const mailOptions = {
+            from: '"UNIQ Game Notification" <noreply@uniqgame.com>',
+            to: recipientEmail,
+            subject: `🏆 Game Winner Secret Pre-Notification: ${winnerSet}`,
+            html: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #0f172a; color: #ffffff; border-radius: 8px;">
+                    <h2 style="color: #10b981;">🏆 UNIQ Game - Winner Pre-Notification</h2>
+                    <p style="color: #94a3b8;">Host pre-calculation notification dispatched at ${timestamp}</p>
+                    <hr style="border: 1px solid #334155;" />
+                    <div style="background-color: #1e293b; padding: 15px; border-radius: 6px; margin-top: 15px;">
+                        <p style="font-size: 1.1rem; color: #fbbf24;"><b>Designated Winning Set:</b> ${winnerSet}</p>
+                        <p><b>Year:</b> ${year}</p>
+                        <p><b>Month:</b> ${month}</p>
+                        <p><b>Dates Range:</b> ${startDate} to ${Number(startDate) + (values ? values.length - 1 : 3)}</p>
+                        <p style="font-size: 1.1rem; color: #34d399;"><b>Winning Values:</b> [ ${values ? values.join(', ') : ''} ]</p>
+                    </div>
+                </div>
+            `
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.log('Email notification logged (SMTP pending authentication):', error.message);
+            } else {
+                console.log('Email sent successfully:', info.response);
+            }
+        });
+
         return res.json({ 
             success: true, 
-            message: `Host notification dispatched for ${winnerSet}`,
-            timestamp: timestamp
+            message: `Host email & console notification dispatched for ${winnerSet}`,
+            timestamp: timestamp,
+            winnerSet: winnerSet,
+            recipient: recipientEmail
         });
     } catch (err) {
         console.error("Notification error:", err);

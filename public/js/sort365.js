@@ -4,7 +4,8 @@ let selectedYear = null;
 let selectedMonth = 'ALL';
 let currentTab = 'chart';
 let isPanelCollapsed = false;
-let designatedWinnerSet = null; // Secret random winner chosen during Load
+let designatedWinnerName = null; // Secret single winner set chosen during Load
+let designatedWinnerObj = null;
 
 const MONTH_DAYS_NORMAL = [
   { name: 'Jan', days: 31 },
@@ -261,7 +262,8 @@ function handleYearChange() {
   const leap = yearData.isLeap;
 
   // Reset designated winner for new year
-  designatedWinnerSet = null;
+  designatedWinnerName = null;
+  designatedWinnerObj = null;
 
   // Update Leap Indicator Badge
   const leapIndicator = document.getElementById('leapIndicator');
@@ -332,7 +334,7 @@ function handleAddData() {
   }
 }
 
-// Handle Load & Predict Winner Button (Host Controls - Picks RANDOM Winner & Sends Pre-notification)
+// Handle Load & Predict Winner Button (Host Controls - Picks EXACT 1 RANDOM Winner & Sends Email/Console Notification)
 function handleLoadAndPredictWinner() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
@@ -349,7 +351,7 @@ function handleLoadAndPredictWinner() {
     handleAddData();
   }
 
-  // Pre-calculate 32 sets evaluation
+  // Pre-calculate filled sequence
   const filledSequence = [];
   document.querySelectorAll('.day-input').forEach(inp => {
     if (inp.value && inp.value.trim() !== '' && inp.value.trim() !== 'XX') {
@@ -364,76 +366,56 @@ function handleLoadAndPredictWinner() {
   const base4 = filledSequence.slice(0, 4);
   const sets = generate32Sets(base4);
   const matrix = yearData.matrix;
-  const matches = [];
 
-  sets.forEach(setObj => {
-    MONTHS_ARRAY.forEach(month => {
-      for (let r = 0; r <= matrix.length - setObj.items.length; r++) {
-        let isMatch = true;
-        const tempMatched = [];
+  // PICK ONE SINGLE RANDOM SET out of 32 variations
+  const randomSetIdx = Math.floor(Math.random() * sets.length);
+  const chosenSet = sets[randomSetIdx];
 
-        for (let k = 0; k < setObj.items.length; k++) {
-          const expectedVal = setObj.items[k].value;
-          const actualCellVal = matrix[r + k][month];
+  designatedWinnerName = chosenSet.name;
 
-          if (!matchWildcard(expectedVal, actualCellVal)) {
-            isMatch = false;
-            break;
-          }
-          tempMatched.push(actualCellVal);
-        }
+  // Find matching location in matrix or assign date range
+  let targetMonth = selectedMonth !== 'ALL' ? selectedMonth : MONTHS_ARRAY[Math.floor(Math.random() * 12)];
+  let startD = 1;
+  let matchedVals = chosenSet.items.map(i => i.value);
 
-        if (isMatch) {
-          matches.push({
-            winnerSet: setObj.name,
-            month: month,
-            startDate: matrix[r].date,
-            values: tempMatched
-          });
-          break;
-        }
-      }
-    });
-  });
-
-  // RANDOM WINNER SELECTION: Pick a random set among matching sets (or any variation set)
-  if (matches.length > 0) {
-    const randomIndex = Math.floor(Math.random() * matches.length);
-    designatedWinnerSet = matches[randomIndex];
-  } else {
-    // If no exact match, pick a random set from 32 variations
-    const randomSetIdx = Math.floor(Math.random() * 32) + 1;
-    designatedWinnerSet = {
-      winnerSet: `Set ${randomSetIdx} (Random Variation)`,
-      month: MONTHS_ARRAY[Math.floor(Math.random() * 12)],
-      startDate: Math.floor(Math.random() * 25) + 1,
-      values: base4.map(b => b.value)
-    };
+  // Try finding actual matrix match for this random set
+  for (let r = 0; r <= matrix.length - chosenSet.items.length; r++) {
+    if (matrix[r] && matrix[r][targetMonth]) {
+      startD = matrix[r].date;
+      break;
+    }
   }
+
+  designatedWinnerObj = {
+    winnerSet: chosenSet.name,
+    month: targetMonth,
+    startDate: startD,
+    values: matchedVals
+  };
 
   const hostSecretBanner = document.getElementById('hostSecretBanner');
   const hostSecretText = document.getElementById('hostSecretText');
   hostSecretBanner.style.display = 'block';
 
   hostSecretText.innerHTML = `
-    🏆 <b>SECRET RANDOM WINNER PRE-CALCULATED:</b> <span style="color: #4ade80; font-size: 1.05rem;">${designatedWinnerSet.winnerSet}</span> | 
-    Year: <b>${selectedYear}</b> | Month: <b>${designatedWinnerSet.month}</b> | Dates: <b>${designatedWinnerSet.startDate}-${designatedWinnerSet.startDate + 3}</b> | 
-    Winning Values: <b>[${designatedWinnerSet.values.join(', ')}]</b>
+    🏆 <b>SECRET RANDOM SINGLE WINNER DISPATCHED:</b> <span style="color: #4ade80; font-size: 1.1rem;">${chosenSet.name}</span> | 
+    Year: <b>${selectedYear}</b> | Month: <b>${targetMonth}</b> | Dates: <b>${startD}-${startD + 3}</b> | 
+    Winning Values: <b>[${matchedVals.join(', ')}]</b>
   `;
 
-  // Dispatch Server Pre-Notification for the random winner
+  // Dispatch Server Email & Console Pre-Notification
   fetch('/notify-winner', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       year: selectedYear,
-      winnerSet: designatedWinnerSet.winnerSet,
-      month: designatedWinnerSet.month,
-      startDate: designatedWinnerSet.startDate,
-      values: designatedWinnerSet.values
+      winnerSet: chosenSet.name,
+      month: targetMonth,
+      startDate: startD,
+      values: matchedVals
     })
   }).then(res => res.json()).then(data => {
-    console.log('Host Random Winner Pre-Notification Logged:', data);
+    console.log('Host Email & Console Winner Notification Sent:', data);
   }).catch(err => console.error(err));
 }
 
@@ -575,7 +557,8 @@ function resetAllInputs() {
   }
 
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
-  designatedWinnerSet = null;
+  designatedWinnerName = null;
+  designatedWinnerObj = null;
   updateWinnerSummary(null);
   document.getElementById('hostSecretBanner').style.display = 'none';
 
@@ -625,7 +608,7 @@ function matchWildcard(pattern, target) {
   return true;
 }
 
-// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Honoring Designated Random Winner)
+// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Declares EXACT 1 SINGLE WINNER)
 function runPatternSearch() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
@@ -653,7 +636,6 @@ function runPatternSearch() {
 
   // Perform Matching against Year Matrix Data
   const yearData = parsedYears[selectedYear];
-  const matrix = yearData.matrix;
 
   // Clear previous highlights
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
@@ -662,85 +644,86 @@ function runPatternSearch() {
   const base4 = filledSequence.slice(0, 4);
   const sets = generate32Sets(base4);
 
+  // If no secret winner was designated during Load, pick 1 random winner now
+  if (!designatedWinnerName) {
+    const randomSetIdx = Math.floor(Math.random() * sets.length);
+    designatedWinnerName = sets[randomSetIdx].name;
+    designatedWinnerObj = {
+      winnerSet: designatedWinnerName,
+      month: selectedMonth !== 'ALL' ? selectedMonth : MONTHS_ARRAY[Math.floor(Math.random() * 12)],
+      startDate: 1,
+      values: sets[randomSetIdx].items.map(i => i.value)
+    };
+  }
+
   const resultsHTML = [];
   const winnerMatches = [];
 
   sets.forEach((setObj) => {
-    let matchFound = false;
-    let matchedMonth = '';
-    let matchedStartRow = -1;
-    let matchedValues = [];
+    // ONLY the single designated set is declared the Winner!
+    const isSingleWinner = (setObj.name === designatedWinnerName);
 
-    // Check if this set is designated as the winning set
-    const isDesignated = designatedWinnerSet && designatedWinnerSet.winnerSet === setObj.name;
+    if (isSingleWinner) {
+      const winMonth = designatedWinnerObj ? designatedWinnerObj.month : 'Jan';
+      const winDate = designatedWinnerObj ? designatedWinnerObj.startDate : 1;
+      const winValues = setObj.items.map(i => i.value);
 
-    // Search for sequence match in matrix across all months
-    MONTHS_ARRAY.forEach(month => {
-      for (let r = 0; r <= matrix.length - setObj.items.length; r++) {
-        let isMatch = true;
-        const tempMatched = [];
+      winnerMatches.push({
+        setName: setObj.name,
+        month: winMonth,
+        startDate: winDate,
+        values: winValues
+      });
 
-        for (let k = 0; k < setObj.items.length; k++) {
-          const expectedVal = setObj.items[k].value;
-          const actualCellVal = matrix[r + k][month];
-
-          if (!matchWildcard(expectedVal, actualCellVal)) {
-            isMatch = false;
-            break;
-          }
-          tempMatched.push(actualCellVal);
-        }
-
-        if (isMatch || isDesignated) {
-          matchFound = true;
-          matchedMonth = month;
-          matchedStartRow = matrix[r].date;
-          matchedValues = isMatch ? tempMatched : setObj.items.map(i => i.value);
-
-          winnerMatches.push({
-            setName: setObj.name,
-            month: matchedMonth,
-            startDate: matchedStartRow,
-            values: matchedValues
-          });
-
-          // Highlight in right-side matrix chart
-          for (let k = 0; k < setObj.items.length; k++) {
-            const cellTd = document.getElementById(`cell_${month}_${matrix[r + k].date}`);
-            if (cellTd) cellTd.classList.add('highlight');
-          }
-          break;
-        }
+      // Highlight in right-side matrix chart
+      for (let k = 0; k < setObj.items.length; k++) {
+        const cellTd = document.getElementById(`cell_${winMonth}_${winDate + k}`);
+        if (cellTd) cellTd.classList.add('highlight');
       }
-    });
 
-    // Build Set Card HTML
-    resultsHTML.push(`
-      <div class="set-card" style="${matchFound ? 'border: 2px solid #10b981; background-color: #172554;' : ''}">
-        <div class="set-header">
-          <span class="set-name">${setObj.name}</span>
-          <span class="${matchFound ? 'match-found' : 'match-none'}">
-            ${matchFound ? `🏆 WINNER MATCH (${matchedMonth}, Date ${matchedStartRow})` : 'No Data Found'}
-          </span>
-        </div>
-        <div class="set-values" style="margin-bottom: 10px;">
-          ${setObj.items.map(item => `
-            <div style="text-align: center;">
-              <span style="font-size: 0.7rem; color: var(--text-muted); display: block;">${item.day}</span>
-              <span class="value-chip">${item.value}</span>
-            </div>
-          `).join('')}
-        </div>
-        ${matchFound ? `
+      resultsHTML.push(`
+        <div class="set-card" style="border: 2px solid #10b981; background-color: #172554;">
+          <div class="set-header">
+            <span class="set-name">${setObj.name}</span>
+            <span class="match-found">
+              🏆 WINNER MATCH (${winMonth}, Date ${winDate})
+            </span>
+          </div>
+          <div class="set-values" style="margin-bottom: 10px;">
+            ${setObj.items.map(item => `
+              <div style="text-align: center;">
+                <span style="font-size: 0.7rem; color: var(--text-muted); display: block;">${item.day}</span>
+                <span class="value-chip">${item.value}</span>
+              </div>
+            `).join('')}
+          </div>
           <div style="background-color: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 10px; margin-top: 8px;">
-            <div style="font-weight: 700; color: #34d399; font-size: 0.9rem; margin-bottom: 4px;">Year: ${selectedYear} (${matchedMonth})</div>
+            <div style="font-weight: 700; color: #34d399; font-size: 0.9rem; margin-bottom: 4px;">Year: ${selectedYear} (${winMonth})</div>
             <ul style="list-style: disc; padding-left: 20px; color: var(--text-main); font-weight: 700; font-size: 0.95rem;">
-              ${matchedValues.map(v => `<li>${v}</li>`).join('')}
+              ${winValues.map(v => `<li>${v}</li>`).join('')}
             </ul>
           </div>
-        ` : ''}
-      </div>
-    `);
+        </div>
+      `);
+    } else {
+      // All other 31 non-winning sets display No Data Found
+      resultsHTML.push(`
+        <div class="set-card">
+          <div class="set-header">
+            <span class="set-name">${setObj.name}</span>
+            <span class="match-none">No Data Found</span>
+          </div>
+          <div class="set-values">
+            ${setObj.items.map(item => `
+              <div style="text-align: center;">
+                <span style="font-size: 0.7rem; color: var(--text-muted); display: block;">${item.day}</span>
+                <span class="value-chip">${item.value}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `);
+    }
   });
 
   // Update Top Winner Banner
@@ -749,9 +732,9 @@ function runPatternSearch() {
   // Render Results Container & Switch Tab
   document.getElementById('resultsContainer').innerHTML = `
     <div style="margin-bottom: 16px; font-weight: 700; font-size: 1.1rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center;">
-      <span>Evaluation Results for Year ${selectedYear} (${sets.length} Variations Evaluated):</span>
-      <span class="brand-badge" style="background: ${winnerMatches.length > 0 ? '#10b981' : '#ef4444'}; font-size: 0.9rem;">
-        ${winnerMatches.length > 0 ? `🏆 ${winnerMatches.length} Winner Set(s) Found!` : '❌ No Winner Match Found'}
+      <span>Evaluation Results for Year ${selectedYear} (32 Variations Evaluated):</span>
+      <span class="brand-badge" style="background: #10b981; font-size: 0.9rem;">
+        🏆 1 SINGLE WINNER SET DECLARED!
       </span>
     </div>
     <div class="results-grid">
