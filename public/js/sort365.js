@@ -4,6 +4,7 @@ let selectedYear = null;
 let selectedMonth = 'ALL';
 let currentTab = 'chart';
 let isPanelCollapsed = false;
+let designatedWinnerSet = null; // Secret random winner chosen during Load
 
 const MONTH_DAYS_NORMAL = [
   { name: 'Jan', days: 31 },
@@ -102,6 +103,21 @@ function toggleLeftPanel() {
     mainContainer.classList.remove('collapsed');
     leftPanel.classList.remove('collapsed');
     btnTogglePanel.textContent = '◀ Collapse';
+  }
+}
+
+// Toggle Individual Month Section (Collapse / Expand Month Grid)
+function toggleMonthSection(monthName) {
+  const grid = document.getElementById(`grid_${monthName}`);
+  const btn = document.getElementById(`toggle_btn_${monthName}`);
+  if (!grid || !btn) return;
+
+  if (grid.style.display === 'none') {
+    grid.style.display = 'grid';
+    btn.textContent = '▼ Collapse';
+  } else {
+    grid.style.display = 'none';
+    btn.textContent = '▲ Expand';
   }
 }
 
@@ -244,6 +260,9 @@ function handleYearChange() {
   const yearData = parsedYears[selectedYear];
   const leap = yearData.isLeap;
 
+  // Reset designated winner for new year
+  designatedWinnerSet = null;
+
   // Update Leap Indicator Badge
   const leapIndicator = document.getElementById('leapIndicator');
   const inputCountBadge = document.getElementById('inputCountBadge');
@@ -313,7 +332,7 @@ function handleAddData() {
   }
 }
 
-// Handle Load & Predict Winner Button (Host Controls - Precalculates Winner & Sends Server Notification)
+// Handle Load & Predict Winner Button (Host Controls - Picks RANDOM Winner & Sends Pre-notification)
 function handleLoadAndPredictWinner() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
@@ -345,7 +364,7 @@ function handleLoadAndPredictWinner() {
   const base4 = filledSequence.slice(0, 4);
   const sets = generate32Sets(base4);
   const matrix = yearData.matrix;
-  const winners = [];
+  const matches = [];
 
   sets.forEach(setObj => {
     MONTHS_ARRAY.forEach(month => {
@@ -365,7 +384,7 @@ function handleLoadAndPredictWinner() {
         }
 
         if (isMatch) {
-          winners.push({
+          matches.push({
             winnerSet: setObj.name,
             month: month,
             startDate: matrix[r].date,
@@ -377,36 +396,45 @@ function handleLoadAndPredictWinner() {
     });
   });
 
+  // RANDOM WINNER SELECTION: Pick a random set among matching sets (or any variation set)
+  if (matches.length > 0) {
+    const randomIndex = Math.floor(Math.random() * matches.length);
+    designatedWinnerSet = matches[randomIndex];
+  } else {
+    // If no exact match, pick a random set from 32 variations
+    const randomSetIdx = Math.floor(Math.random() * 32) + 1;
+    designatedWinnerSet = {
+      winnerSet: `Set ${randomSetIdx} (Random Variation)`,
+      month: MONTHS_ARRAY[Math.floor(Math.random() * 12)],
+      startDate: Math.floor(Math.random() * 25) + 1,
+      values: base4.map(b => b.value)
+    };
+  }
+
   const hostSecretBanner = document.getElementById('hostSecretBanner');
   const hostSecretText = document.getElementById('hostSecretText');
   hostSecretBanner.style.display = 'block';
 
-  if (winners.length > 0) {
-    const win = winners[0];
-    hostSecretText.innerHTML = `
-      🏆 <b>SECRET WINNER PRE-CALCULATED:</b> <span style="color: #4ade80;">${win.winnerSet}</span> | 
-      Year: <b>${selectedYear}</b> | Month: <b>${win.month}</b> | Dates: <b>${win.startDate}-${win.startDate + win.values.length - 1}</b> | 
-      Winning Values: <b>[${win.values.join(', ')}]</b>
-    `;
+  hostSecretText.innerHTML = `
+    🏆 <b>SECRET RANDOM WINNER PRE-CALCULATED:</b> <span style="color: #4ade80; font-size: 1.05rem;">${designatedWinnerSet.winnerSet}</span> | 
+    Year: <b>${selectedYear}</b> | Month: <b>${designatedWinnerSet.month}</b> | Dates: <b>${designatedWinnerSet.startDate}-${designatedWinnerSet.startDate + 3}</b> | 
+    Winning Values: <b>[${designatedWinnerSet.values.join(', ')}]</b>
+  `;
 
-    // Dispatch Server Pre-Notification
-    fetch('/notify-winner', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        year: selectedYear,
-        winnerSet: win.winnerSet,
-        month: win.month,
-        startDate: win.startDate,
-        values: win.values
-      })
-    }).then(res => res.json()).then(data => {
-      console.log('Host Winner Notification Server Log:', data);
-    }).catch(err => console.error(err));
-
-  } else {
-    hostSecretText.innerHTML = `⚠️ <b>PRE-VIEW RESULT:</b> No winning set match found in 32 sets for Year ${selectedYear}.`;
-  }
+  // Dispatch Server Pre-Notification for the random winner
+  fetch('/notify-winner', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      year: selectedYear,
+      winnerSet: designatedWinnerSet.winnerSet,
+      month: designatedWinnerSet.month,
+      startDate: designatedWinnerSet.startDate,
+      values: designatedWinnerSet.values
+    })
+  }).then(res => res.json()).then(data => {
+    console.log('Host Random Winner Pre-Notification Logged:', data);
+  }).catch(err => console.error(err));
 }
 
 // Helper: Import a single month's Excel values into corresponding input boxes
@@ -427,7 +455,7 @@ function importMonthData(monthName, yearData) {
   }
 }
 
-// Render Left-Side 365 or 366 Input Boxes (Blank Structure)
+// Render Left-Side 365 or 366 Input Boxes (Blank Structure with Collapsible Month Headers)
 function renderLeftInputs(isLeap) {
   const container = document.getElementById('inputsScrollArea');
   container.innerHTML = '';
@@ -442,11 +470,18 @@ function renderLeftInputs(isLeap) {
 
     const header = document.createElement('div');
     header.className = 'month-header';
-    header.innerHTML = `<span>${mConfig.name}</span><span>${mConfig.days} Days</span>`;
+    header.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span>${mConfig.name}</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">(${mConfig.days} Days)</span>
+      </div>
+      <button type="button" class="month-toggle-btn" id="toggle_btn_${mConfig.name}" onclick="toggleMonthSection('${mConfig.name}')">▼ Collapse</button>
+    `;
     monthSec.appendChild(header);
 
     const grid = document.createElement('div');
     grid.className = 'date-grid';
+    grid.id = `grid_${mConfig.name}`;
 
     for (let day = 1; day <= mConfig.days; day++) {
       totalInputCount++;
@@ -540,6 +575,7 @@ function resetAllInputs() {
   }
 
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
+  designatedWinnerSet = null;
   updateWinnerSummary(null);
   document.getElementById('hostSecretBanner').style.display = 'none';
 
@@ -589,7 +625,7 @@ function matchWildcard(pattern, target) {
   return true;
 }
 
-// Run Optimized Pattern Search Engine (Evaluates 32 Sets)
+// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Honoring Designated Random Winner)
 function runPatternSearch() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
@@ -635,6 +671,9 @@ function runPatternSearch() {
     let matchedStartRow = -1;
     let matchedValues = [];
 
+    // Check if this set is designated as the winning set
+    const isDesignated = designatedWinnerSet && designatedWinnerSet.winnerSet === setObj.name;
+
     // Search for sequence match in matrix across all months
     MONTHS_ARRAY.forEach(month => {
       for (let r = 0; r <= matrix.length - setObj.items.length; r++) {
@@ -652,11 +691,11 @@ function runPatternSearch() {
           tempMatched.push(actualCellVal);
         }
 
-        if (isMatch) {
+        if (isMatch || isDesignated) {
           matchFound = true;
           matchedMonth = month;
           matchedStartRow = matrix[r].date;
-          matchedValues = tempMatched;
+          matchedValues = isMatch ? tempMatched : setObj.items.map(i => i.value);
 
           winnerMatches.push({
             setName: setObj.name,
@@ -675,7 +714,7 @@ function runPatternSearch() {
       }
     });
 
-    // Build Set Card HTML matching screenshot layout
+    // Build Set Card HTML
     resultsHTML.push(`
       <div class="set-card" style="${matchFound ? 'border: 2px solid #10b981; background-color: #172554;' : ''}">
         <div class="set-header">
