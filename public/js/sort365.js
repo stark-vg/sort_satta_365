@@ -67,17 +67,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileUpload = document.getElementById('fileUpload');
   const yearSelect = document.getElementById('yearSelect');
   const monthSelect = document.getElementById('monthSelect');
+  const btnAddData = document.getElementById('btnAddData');
   const btnSearch = document.getElementById('btnSearch');
   const btnReset = document.getElementById('btnReset');
-  const btnFillSample = document.getElementById('btnFillSample');
   const btnTogglePanel = document.getElementById('btnTogglePanel');
 
   fileUpload.addEventListener('change', handleFileUpload);
   yearSelect.addEventListener('change', handleYearChange);
   monthSelect.addEventListener('change', handleMonthChange);
+  btnAddData.addEventListener('click', handleAddData);
   btnSearch.addEventListener('click', runPatternSearch);
   btnReset.addEventListener('click', resetAllInputs);
-  btnFillSample.addEventListener('click', reloadExcelValues);
   
   if (btnTogglePanel) {
     btnTogglePanel.addEventListener('click', toggleLeftPanel);
@@ -173,6 +173,7 @@ function parseExcelSheet(sheet) {
   // Populate Select Dropdowns
   const yearSelect = document.getElementById('yearSelect');
   const monthSelect = document.getElementById('monthSelect');
+  const btnAddData = document.getElementById('btnAddData');
 
   yearSelect.innerHTML = '';
   availableYears.forEach(y => {
@@ -184,6 +185,7 @@ function parseExcelSheet(sheet) {
 
   yearSelect.disabled = false;
   monthSelect.disabled = false;
+  btnAddData.disabled = false;
   document.getElementById('btnSearch').disabled = false;
 
   // Auto-select first year
@@ -229,7 +231,7 @@ function processYearRows(year, rows, headerRow) {
   };
 }
 
-// Handle Year Change Event
+// Handle Year Change Event (Renders blank inputs & chart matrix; does NOT auto-populate)
 function handleYearChange() {
   const yearSelect = document.getElementById('yearSelect');
   selectedYear = yearSelect.value;
@@ -252,8 +254,8 @@ function handleYearChange() {
     inputCountBadge.textContent = '365 Days';
   }
 
-  // Render Left Side Inputs & Right Side Chart Matrix
-  renderLeftInputs(leap, yearData, selectedMonth);
+  // Render Left Side Blank Input Boxes & Right Side Chart Matrix
+  renderLeftInputs(leap);
   renderRightMatrix(yearData);
 
   // Reset Winner status banner until search is triggered
@@ -267,10 +269,6 @@ function handleMonthChange() {
 
   if (!selectedYear || !parsedYears[selectedYear]) return;
 
-  const yearData = parsedYears[selectedYear];
-  // Import/fill values for selected month (or ALL)
-  renderLeftInputs(yearData.isLeap, yearData, selectedMonth);
-
   // Scroll to selected month section if specific month selected
   if (selectedMonth !== 'ALL') {
     const monthSec = document.getElementById(`month_sec_${selectedMonth}`);
@@ -280,8 +278,56 @@ function handleMonthChange() {
   }
 }
 
-// Render Left-Side 365 or 366 Input Boxes populated with Year & Month Data from Excel
-function renderLeftInputs(isLeap, yearData, targetMonth = 'ALL') {
+// Handle Add/Import Data Button Click (Explicit Trigger to Import Excel Data into Inputs)
+function handleAddData() {
+  if (!selectedYear || !parsedYears[selectedYear]) {
+    alert('Please upload an Excel file and select a Year first.');
+    return;
+  }
+
+  const yearData = parsedYears[selectedYear];
+  const leap = yearData.isLeap;
+  const monthsConfig = leap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
+
+  if (selectedMonth === 'ALL') {
+    // Import ALL 12 months for the selected year
+    monthsConfig.forEach(mConfig => {
+      importMonthData(mConfig.name, yearData);
+    });
+    console.log(`Imported Full Year data for Year ${selectedYear}.`);
+  } else {
+    // Import ONLY the selected month for the selected year
+    importMonthData(selectedMonth, yearData);
+    console.log(`Imported ${selectedMonth} data for Year ${selectedYear}.`);
+
+    // Scroll to the imported month section
+    const monthSec = document.getElementById(`month_sec_${selectedMonth}`);
+    if (monthSec) {
+      monthSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+}
+
+// Helper: Import a single month's Excel values into corresponding input boxes
+function importMonthData(monthName, yearData) {
+  const monthsConfig = yearData.isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
+  const mConfig = monthsConfig.find(m => m.name === monthName);
+
+  if (mConfig && yearData.matrix) {
+    for (let day = 1; day <= mConfig.days; day++) {
+      const input = document.getElementById(`input_${monthName}_${day}`);
+      if (input) {
+        const rowObj = yearData.matrix.find(r => r.date === day);
+        if (rowObj && rowObj[monthName] && rowObj[monthName] !== 'XX') {
+          input.value = rowObj[monthName];
+        }
+      }
+    }
+  }
+}
+
+// Render Left-Side 365 or 366 Input Boxes (Blank Structure)
+function renderLeftInputs(isLeap) {
   const container = document.getElementById('inputsScrollArea');
   container.innerHTML = '';
 
@@ -318,14 +364,6 @@ function renderLeftInputs(isLeap, yearData, targetMonth = 'ALL') {
       input.id = `input_${mConfig.name}_${day}`;
       input.setAttribute('data-month', mConfig.name);
       input.setAttribute('data-day', day);
-
-      // Extract value from Excel matrix if targetMonth is ALL or matches mConfig.name
-      if (yearData && yearData.matrix && (targetMonth === 'ALL' || targetMonth === mConfig.name)) {
-        const rowObj = yearData.matrix.find(r => r.date === day);
-        if (rowObj && rowObj[mConfig.name] && rowObj[mConfig.name] !== 'XX') {
-          input.value = rowObj[mConfig.name];
-        }
-      }
 
       input.addEventListener('input', (e) => {
         if (e.target.value.length > 2) {
@@ -389,31 +427,6 @@ function renderRightMatrix(yearData) {
 
   table.appendChild(tbody);
   container.appendChild(table);
-}
-
-// Reload Excel Values for Selected Month (or All Months)
-function reloadExcelValues() {
-  if (selectedYear && parsedYears[selectedYear]) {
-    const yearData = parsedYears[selectedYear];
-
-    if (selectedMonth === 'ALL') {
-      renderLeftInputs(yearData.isLeap, yearData, 'ALL');
-    } else {
-      // Reload values ONLY for the selected month
-      const monthsConfig = yearData.isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
-      const mConfig = monthsConfig.find(m => m.name === selectedMonth);
-
-      if (mConfig) {
-        for (let day = 1; day <= mConfig.days; day++) {
-          const input = document.getElementById(`input_${selectedMonth}_${day}`);
-          if (input) {
-            const rowObj = yearData.matrix.find(r => r.date === day);
-            input.value = (rowObj && rowObj[selectedMonth] && rowObj[selectedMonth] !== 'XX') ? rowObj[selectedMonth] : '';
-          }
-        }
-      }
-    }
-  }
 }
 
 // Reset Input Fields for Selected Month (or All Months)
@@ -496,7 +509,7 @@ function runPatternSearch() {
   });
 
   if (filledSequence.length === 0) {
-    alert('Please enter or import at least 1 date value in the left panel to evaluate winners.');
+    alert('Please enter or click "➕ Import / Add Data" in the left panel to evaluate winners.');
     return;
   }
 
