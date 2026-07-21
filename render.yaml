@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: uniq-game-365
+    env: node
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: EMAIL
+        value: Davinderwadhwa974@gmail.com
+      - key: PASSWORD
+        value: Love123456@
