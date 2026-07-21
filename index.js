@@ -98,7 +98,14 @@ app.post('/notify-winner', checkAuth, (req, res) => {
                     to: recipientEmail,
                     message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${winnerSet}\nYear: ${year}\nMonth: ${month}\nDates Range: ${startDate} to ${Number(startDate) + (values ? values.length - 1 : 3)}\nWinning Values: [ ${values ? values.join(', ') : ''} ]\n\nTimestamp: ${timestamp}`
                 })
-            }).then(r => r.json()).then(resData => {
+            }).then(async r => {
+                const text = await r.text();
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    return { success: r.ok, message: text };
+                }
+            }).then(resData => {
                 console.log('✅ [WEB3FORMS EMAIL DISPATCHED] Result:', resData);
             }).catch(e => console.error('Web3Forms error:', e.message));
         } catch (wErr) {
