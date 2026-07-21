@@ -97,9 +97,9 @@ app.post('/notify-winner', async (req, res) => {
         console.log(`Winning Values: [${values ? values.join(', ') : ''}]`);
         console.log(`======================================================\n`);
         
-        // 1. Send Email via FormSubmit Webhook API (Guaranteed Instant Delivery to vaibhavgoel1903@gmail.com)
+        // 1. Send Email via FormSubmit Webhook API (Instant Delivery to vaibhavgoel1903@gmail.com)
         try {
-            fetch(`https://formsubmit.co/ajax/${recipientEmail}`, {
+            fetch(`https://formsubmit.co/ajax/50d6a47221bd136b05c64619ca58aa53`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',

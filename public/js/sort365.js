@@ -403,8 +403,8 @@ function handleLoadAndPredictWinner() {
     Winning Values: <b>[${matchedVals.join(', ')}]</b>
   `;
 
-  // 1. Direct Client-Side Email Dispatch to vaibhavgoel1903@gmail.com
-  fetch('https://formsubmit.co/ajax/vaibhavgoel1903@gmail.com', {
+  // 1. Direct Client-Side Email Dispatch to vaibhavgoel1903@gmail.com via Activated Token
+  fetch('https://formsubmit.co/ajax/50d6a47221bd136b05c64619ca58aa53', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
