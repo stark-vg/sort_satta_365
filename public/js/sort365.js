@@ -192,38 +192,27 @@ function parseExcelSheet(sheet) {
   handleYearChange();
 }
 
-// Process Data Rows for a Single Year using Dynamic Header Column Indices
+// Process Data Rows for a Single Year with robust positional month extraction
 function processYearRows(year, rows, headerRow) {
   const matrix = [];
   const leap = isLeapYear(year);
-
-  // Default fallback column indices
-  const colIndices = {
-    Jan: 3, Feb: 7, Mar: 10, Apr: 15, May: 20, Jun: 25,
-    Jul: 30, Aug: 33, Sep: 36, Oct: 41, Nov: 45, Dec: 48
-  };
-
-  // DYNAMIC HEADER DETECTION: Scan header row for exact month column positions
-  if (headerRow && Array.isArray(headerRow)) {
-    headerRow.forEach((cellVal, colIdx) => {
-      if (cellVal && typeof cellVal === 'string') {
-        const cleanVal = cellVal.trim();
-        MONTHS_ARRAY.forEach(m => {
-          if (cleanVal.toLowerCase().includes(m.toLowerCase())) {
-            colIndices[m] = colIdx;
-          }
-        });
-      }
-    });
-  }
 
   rows.forEach(r => {
     const dateNum = r[0];
     const rowData = { date: dateNum };
 
-    MONTHS_ARRAY.forEach((m) => {
-      const colIdx = colIndices[m];
-      let cellVal = r[colIdx] !== undefined && r[colIdx] !== null ? r[colIdx] : 'XX';
+    // Collect all non-empty values after col 0 in left-to-right order for this row
+    const nonEmpties = [];
+    for (let c = 1; c < r.length; c++) {
+      const val = r[c];
+      if (val !== undefined && val !== null && val !== '') {
+        nonEmpties.push(val);
+      }
+    }
+
+    // Assign the 12 month values in sequence (1st = Jan, 2nd = Feb, ..., 12th = Dec)
+    MONTHS_ARRAY.forEach((m, idx) => {
+      let cellVal = nonEmpties[idx] !== undefined ? nonEmpties[idx] : 'XX';
       if (typeof cellVal === 'number' && cellVal < 10) {
         cellVal = '0' + cellVal;
       }
