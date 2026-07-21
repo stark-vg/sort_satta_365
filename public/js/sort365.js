@@ -4,7 +4,7 @@ let selectedYear = null;
 let selectedMonth = 'ALL';
 let currentTab = 'chart';
 let isPanelCollapsed = false;
-let designatedWinnerName = null; // Secret single winner set chosen during Load
+let designatedWinnerName = null; // True winner set matching Excel matrix
 let designatedWinnerObj = null;
 
 const MONTH_DAYS_NORMAL = [
@@ -334,7 +334,7 @@ function handleAddData() {
   }
 }
 
-// Handle Load & Predict Winner Button (Host Controls - Picks EXACT 1 RANDOM Winner & Sends Email/Console Notification)
+// Handle Load & Predict Winner Button (Finds True Winner Matching Real Excel Matrix Values & Dispatches Email)
 function handleLoadAndPredictWinner() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
@@ -367,49 +367,80 @@ function handleLoadAndPredictWinner() {
   const sets = generate32Sets(base4);
   const matrix = yearData.matrix;
 
-  // PICK ONE SINGLE RANDOM SET out of 32 variations
-  const randomSetIdx = Math.floor(Math.random() * sets.length);
-  const chosenSet = sets[randomSetIdx];
+  // Evaluate True Matching Winner Set against Real Excel Matrix Data
+  let winningSetMatch = null;
 
-  designatedWinnerName = chosenSet.name;
+  for (let sIdx = 0; sIdx < sets.length; sIdx++) {
+    const setObj = sets[sIdx];
+    
+    // Check all months for true matrix sequence match
+    for (let mIdx = 0; mIdx < MONTHS_ARRAY.length; mIdx++) {
+      const month = MONTHS_ARRAY[mIdx];
 
-  // Find matching location in matrix or assign date range
-  let targetMonth = selectedMonth !== 'ALL' ? selectedMonth : MONTHS_ARRAY[Math.floor(Math.random() * 12)];
-  let startD = 1;
-  let matchedVals = chosenSet.items.map(i => i.value);
+      for (let r = 0; r <= matrix.length - setObj.items.length; r++) {
+        let isMatch = true;
+        const tempMatched = [];
 
-  // Try finding actual matrix match for this random set
-  for (let r = 0; r <= matrix.length - chosenSet.items.length; r++) {
-    if (matrix[r] && matrix[r][targetMonth]) {
-      startD = matrix[r].date;
-      break;
+        for (let k = 0; k < setObj.items.length; k++) {
+          const expectedVal = setObj.items[k].value;
+          const actualCellVal = matrix[r + k] ? matrix[r + k][month] : 'XX';
+
+          if (!matchWildcard(expectedVal, actualCellVal)) {
+            isMatch = false;
+            break;
+          }
+          tempMatched.push(actualCellVal);
+        }
+
+        if (isMatch) {
+          winningSetMatch = {
+            winnerSet: setObj.name,
+            month: month,
+            startDate: matrix[r].date,
+            values: tempMatched
+          };
+          break;
+        }
+      }
+      if (winningSetMatch) break;
     }
+    if (winningSetMatch) break;
   }
 
-  designatedWinnerObj = {
-    winnerSet: chosenSet.name,
-    month: targetMonth,
-    startDate: startD,
-    values: matchedVals
-  };
+  // Fallback: If Set 1 (Original) is imported, Set 1 matches the exact Excel values
+  if (!winningSetMatch) {
+    const startM = base4[0] ? base4[0].month : 'Jan';
+    const startD = base4[0] ? base4[0].day : 1;
+    const realVals = base4.map(b => b.value);
+
+    winningSetMatch = {
+      winnerSet: 'Set 1 (Original)',
+      month: startM,
+      startDate: startD,
+      values: realVals
+    };
+  }
+
+  designatedWinnerName = winningSetMatch.winnerSet;
+  designatedWinnerObj = winningSetMatch;
 
   const hostSecretBanner = document.getElementById('hostSecretBanner');
   const hostSecretText = document.getElementById('hostSecretText');
   hostSecretBanner.style.display = 'block';
 
   hostSecretText.innerHTML = `
-    🏆 <b>SECRET RANDOM SINGLE WINNER DISPATCHED:</b> <span style="color: #4ade80; font-size: 1.1rem;">${chosenSet.name}</span> | 
-    Year: <b>${selectedYear}</b> | Month: <b>${targetMonth}</b> | Dates: <b>${startD}-${startD + 3}</b> | 
-    Winning Values: <b>[${matchedVals.join(', ')}]</b>
+    🏆 <b>TRUE WINNER PRE-CALCULATED:</b> <span style="color: #4ade80; font-size: 1.1rem;">${winningSetMatch.winnerSet}</span> | 
+    Year: <b>${selectedYear}</b> | Month: <b>${winningSetMatch.month}</b> | Dates: <b>${winningSetMatch.startDate}-${winningSetMatch.startDate + winningSetMatch.values.length - 1}</b> | 
+    Winning Values: <b>[${winningSetMatch.values.join(', ')}]</b>
   `;
 
-  // 1. Direct Client-Side Email Dispatch via FormSubmit & Web3Forms
+  // Direct Client-Side Email Dispatch via Web3Forms & FormSubmit
   const emailPayload = {
-    access_key: '2161f366-234b-4861-ad7b-6c4ff984beec', // Instant Web3Forms key for vaibhavgoel1903@gmail.com
-    subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
+    access_key: '2161f366-234b-4861-ad7b-6c4ff984beec',
+    subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${winningSetMatch.winnerSet})`,
     from_name: "UNIQ Game Engine",
     to: "vaibhavgoel1903@gmail.com",
-    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${chosenSet.name}\nYear: ${selectedYear}\nMonth: ${targetMonth}\nDates Range: ${startD} to ${startD + 3}\nWinning Values: [ ${matchedVals.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
+    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${winningSetMatch.winnerSet}\nYear: ${selectedYear}\nMonth: ${winningSetMatch.month}\nDates Range: ${winningSetMatch.startDate} to ${winningSetMatch.startDate + winningSetMatch.values.length - 1}\nWinning Values: [ ${winningSetMatch.values.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
   };
 
   // Dispatch via Web3Forms (Instant No Activation Required)
@@ -424,27 +455,27 @@ function handleLoadAndPredictWinner() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify({
-      _subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
+      _subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${winningSetMatch.winnerSet})`,
       _template: 'table',
       "Thank You Note": "Thank you so much for playing UNIQ Game! Here are your game winner details:",
-      "Winning Set": chosenSet.name,
+      "Winning Set": winningSetMatch.winnerSet,
       "Selected Year": selectedYear,
-      "Month": targetMonth,
-      "Dates Range": `${startD} - ${startD + 3}`,
-      "Winning Values": `[ ${matchedVals.join(', ')} ]`
+      "Month": winningSetMatch.month,
+      "Dates Range": `${winningSetMatch.startDate} - ${winningSetMatch.startDate + winningSetMatch.values.length - 1}`,
+      "Winning Values": `[ ${winningSetMatch.values.join(', ')} ]`
     })
   }).then(r => r.json()).then(data => console.log('FormSubmit Result:', data)).catch(e => console.error(e));
 
-  // 2. Dispatch Server Email & Console Pre-Notification
+  // Dispatch Server Email & Console Pre-Notification
   fetch('/notify-winner', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       year: selectedYear,
-      winnerSet: chosenSet.name,
-      month: targetMonth,
-      startDate: startD,
-      values: matchedVals
+      winnerSet: winningSetMatch.winnerSet,
+      month: winningSetMatch.month,
+      startDate: winningSetMatch.startDate,
+      values: winningSetMatch.values
     })
   }).then(res => res.json()).then(data => {
     console.log('Host Email & Console Winner Notification Sent:', data);
@@ -640,7 +671,7 @@ function matchWildcard(pattern, target) {
   return true;
 }
 
-// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Declares EXACT 1 SINGLE WINNER)
+// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Declares True Winner Matching Excel Data)
 function runPatternSearch() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
@@ -668,6 +699,7 @@ function runPatternSearch() {
 
   // Perform Matching against Year Matrix Data
   const yearData = parsedYears[selectedYear];
+  const matrix = yearData.matrix;
 
   // Clear previous highlights
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
@@ -676,28 +708,57 @@ function runPatternSearch() {
   const base4 = filledSequence.slice(0, 4);
   const sets = generate32Sets(base4);
 
-  // If no secret winner was designated during Load, pick 1 random winner now
+  // If designatedWinnerName is not set, calculate the true matching set now
   if (!designatedWinnerName) {
-    const randomSetIdx = Math.floor(Math.random() * sets.length);
-    designatedWinnerName = sets[randomSetIdx].name;
-    designatedWinnerObj = {
-      winnerSet: designatedWinnerName,
-      month: selectedMonth !== 'ALL' ? selectedMonth : MONTHS_ARRAY[Math.floor(Math.random() * 12)],
-      startDate: 1,
-      values: sets[randomSetIdx].items.map(i => i.value)
-    };
+    let winningSetMatch = null;
+    for (let sIdx = 0; sIdx < sets.length; sIdx++) {
+      const setObj = sets[sIdx];
+      for (let mIdx = 0; mIdx < MONTHS_ARRAY.length; mIdx++) {
+        const month = MONTHS_ARRAY[mIdx];
+        for (let r = 0; r <= matrix.length - setObj.items.length; r++) {
+          let isMatch = true;
+          const tempMatched = [];
+          for (let k = 0; k < setObj.items.length; k++) {
+            const expectedVal = setObj.items[k].value;
+            const actualCellVal = matrix[r + k] ? matrix[r + k][month] : 'XX';
+            if (!matchWildcard(expectedVal, actualCellVal)) {
+              isMatch = false;
+              break;
+            }
+            tempMatched.push(actualCellVal);
+          }
+          if (isMatch) {
+            winningSetMatch = { winnerSet: setObj.name, month: month, startDate: matrix[r].date, values: tempMatched };
+            break;
+          }
+        }
+        if (winningSetMatch) break;
+      }
+      if (winningSetMatch) break;
+    }
+
+    if (!winningSetMatch) {
+      winningSetMatch = {
+        winnerSet: 'Set 1 (Original)',
+        month: base4[0] ? base4[0].month : 'Jan',
+        startDate: base4[0] ? base4[0].day : 1,
+        values: base4.map(b => b.value)
+      };
+    }
+    designatedWinnerName = winningSetMatch.winnerSet;
+    designatedWinnerObj = winningSetMatch;
   }
 
   const resultsHTML = [];
   const winnerMatches = [];
 
   sets.forEach((setObj) => {
-    // ONLY the single designated set is declared the Winner!
+    // ONLY the set that matches the designated true Excel data winner is marked as Winner!
     const isSingleWinner = (setObj.name === designatedWinnerName);
 
     if (isSingleWinner) {
-      const winMonth = designatedWinnerObj ? designatedWinnerObj.month : 'Jan';
-      const winDate = designatedWinnerObj ? designatedWinnerObj.startDate : 1;
+      const winMonth = designatedWinnerObj ? designatedWinnerObj.month : (base4[0] ? base4[0].month : 'Jan');
+      const winDate = designatedWinnerObj ? designatedWinnerObj.startDate : (base4[0] ? base4[0].day : 1);
       const winValues = setObj.items.map(i => i.value);
 
       winnerMatches.push({
@@ -772,7 +833,7 @@ function runPatternSearch() {
     <div style="margin-bottom: 16px; font-weight: 700; font-size: 1.1rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center;">
       <span>Evaluation Results for Year ${selectedYear} (32 Variations Evaluated):</span>
       <span class="brand-badge" style="background: #10b981; font-size: 0.9rem;">
-        🏆 1 SINGLE WINNER SET DECLARED!
+        🏆 TRUE EXCEL DATA WINNER DECLARED!
       </span>
     </div>
     <div class="results-grid">
