@@ -650,14 +650,92 @@ function runPatternSearch() {
   const base4 = validItems.map(i => ({ month: i.month, day: i.day, value: i.value }));
   const sets = generate32Sets(base4);
 
+  // Auto-collapse all months except the winning month
+  MONTHS_ARRAY.forEach(m => {
+    const grid = document.getElementById(`grid_${m}`);
+    const btn = document.getElementById(`toggle_btn_${m}`);
+    if (grid && btn) {
+      if (m === winMonth) {
+        grid.style.display = 'grid';
+        btn.textContent = '▼ Collapse';
+      } else {
+        grid.style.display = 'none';
+        btn.textContent = '▲ Expand';
+      }
+    }
+  });
+
   // Clear previous highlights
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
 
-  const resultsHTML = [];
-  const winnerMatches = [];
+  // Switch to Results Tab instantly to view loading progress
+  switchTab('results');
 
-  sets.forEach((setObj) => {
+  const btnSearch = document.getElementById('btnSearch');
+  if (btnSearch) {
+    btnSearch.disabled = true;
+    btnSearch.textContent = '🔍 Scanning...';
+    btnSearch.classList.remove('btn-pulse');
+  }
+
+  // Setup Results Viewport with a scanning progress bar
+  const resultsContainer = document.getElementById('resultsContainer');
+  resultsContainer.innerHTML = `
+    <div style="margin-bottom: 16px; font-weight: 700; font-size: 1.1rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center;">
+      <span>Scanning Set Variations for Year ${selectedYear}...</span>
+      <span id="scanProgressBadge" class="brand-badge" style="background: #f59e0b; font-size: 0.9rem;">
+        0% Complete (0/32 Sets)
+      </span>
+    </div>
+    <div class="results-grid" id="animatedResultsGrid"></div>
+  `;
+
+  const animatedGrid = document.getElementById('animatedResultsGrid');
+  const winnerMatches = [];
+  let currentIndex = 0;
+
+  function loadNextSetCard() {
+    if (currentIndex >= sets.length) {
+      // Complete!
+      if (btnSearch) {
+        btnSearch.textContent = '🚀 Start Search (32 Sets)';
+      }
+      isSetsLoaded = false;
+
+      // Update progress badge to complete state
+      const badge = document.getElementById('scanProgressBadge');
+      if (badge) {
+        badge.textContent = '🏆 1 Winner Set Declared!';
+        badge.style.backgroundColor = '#10b981';
+      }
+
+      // Highlight winning cells in right-side matrix chart
+      validItems.forEach(item => {
+        const cellTd = document.getElementById(`cell_${item.month}_${item.day}`);
+        if (cellTd) cellTd.classList.add('highlight');
+      });
+
+      // Show Congratulations Pop-up Modal!
+      const congratsDatesStr = validItems.map(i => `${i.month} ${i.day}`).join(', ');
+      document.getElementById('congratsWinnerSet').textContent = designatedWinnerObj.winnerSet;
+      document.getElementById('congratsYearMonth').textContent = `${selectedYear} ${winMonth}`;
+      document.getElementById('congratsDates').textContent = congratsDatesStr;
+      document.getElementById('congratsValues').textContent = `[ ${realVals.join(', ')} ]`;
+      
+      const congratsModal = document.getElementById('congratulationsModal');
+      congratsModal.style.display = 'flex';
+
+      // Update Top Winner Banner
+      updateWinnerSummary(winnerMatches);
+
+      // Trigger Confetti Party!
+      triggerCongratsConfetti();
+      return;
+    }
+
+    const setObj = sets[currentIndex];
     const isWinnerSetCard = (setObj.name === designatedWinnerName);
+    let cardHTML = '';
 
     if (isWinnerSetCard) {
       winnerMatches.push({
@@ -667,14 +745,8 @@ function runPatternSearch() {
         values: realVals
       });
 
-      // Highlight valid items in right-side matrix chart
-      validItems.forEach(item => {
-        const cellTd = document.getElementById(`cell_${item.month}_${item.day}`);
-        if (cellTd) cellTd.classList.add('highlight');
-      });
-
-      resultsHTML.push(`
-        <div class="set-card" style="border: 2px solid #10b981; background-color: #172554;">
+      cardHTML = `
+        <div class="set-card" style="border: 2px solid #10b981; background-color: #172554; opacity: 0; transform: translateY(20px); transition: all 0.3s ease;">
           <div class="set-header">
             <span class="set-name">${setObj.name}</span>
             <span class="match-found">
@@ -696,11 +768,10 @@ function runPatternSearch() {
             </ul>
           </div>
         </div>
-      `);
+      `;
     } else {
-      // All other 31 non-winning set cards display No Data Found
-      resultsHTML.push(`
-        <div class="set-card">
+      cardHTML = `
+        <div class="set-card" style="opacity: 0; transform: translateY(20px); transition: all 0.3s ease;">
           <div class="set-header">
             <span class="set-name">${setObj.name}</span>
             <span class="match-none">No Data Found</span>
@@ -717,35 +788,36 @@ function runPatternSearch() {
             }).join('')}
           </div>
         </div>
-      `);
+      `;
     }
-  });
 
-  // Update Top Winner Banner
-  updateWinnerSummary(winnerMatches);
+    // Append card to grid
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = cardHTML;
+    const cardEl = tempDiv.firstElementChild;
+    animatedGrid.appendChild(cardEl);
 
-  // Render Results Container & Switch Tab
-  document.getElementById('resultsContainer').innerHTML = `
-    <div style="margin-bottom: 16px; font-weight: 700; font-size: 1.1rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center;">
-      <span>Evaluation Results for Year ${selectedYear} (32 Variations Evaluated):</span>
-      <span class="brand-badge" style="background: #10b981; font-size: 0.9rem;">
-        🏆 1 RANDOM WINNER SET DECLARED!
-      </span>
-    </div>
-    <div class="results-grid">
-      ${resultsHTML.join('')}
-    </div>
-  `;
+    // Trigger visual entry transition
+    setTimeout(() => {
+      cardEl.style.opacity = '1';
+      cardEl.style.transform = 'translateY(0)';
+    }, 10);
 
-  // Reset workflow load flag after search completes
-  const btnSearch = document.getElementById('btnSearch');
-  if (btnSearch) {
-    btnSearch.disabled = true;
-    btnSearch.classList.remove('btn-pulse');
+    currentIndex++;
+
+    // Update Progress Bar/Badge
+    const percent = Math.round((currentIndex / sets.length) * 100);
+    const progressBadge = document.getElementById('scanProgressBadge');
+    if (progressBadge) {
+      progressBadge.textContent = `${percent}% Complete (${currentIndex}/32 Sets)`;
+    }
+
+    // Schedule next set card load with 150ms delay
+    setTimeout(loadNextSetCard, 150);
   }
-  isSetsLoaded = false;
 
-  switchTab('results');
+  // Start the loading sequence
+  loadNextSetCard();
 }
 
 // Render Left-Side 365 or 366 Input Boxes
@@ -984,4 +1056,49 @@ function generate32Sets(baseItems) {
   });
 
   return sets;
+}
+
+// Function to close Congratulations Modal
+function closeCongratsModal() {
+  document.getElementById('congratulationsModal').style.display = 'none';
+}
+
+// Lightweight Confetti Particles Generation Script
+function triggerCongratsConfetti() {
+  const container = document.getElementById('congratulationsModal');
+  const colors = ['#fbbf24', '#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#a855f7'];
+
+  for (let i = 0; i < 70; i++) {
+    const confetti = document.createElement('div');
+    confetti.style.position = 'absolute';
+    confetti.style.width = Math.random() * 8 + 6 + 'px';
+    confetti.style.height = Math.random() * 12 + 6 + 'px';
+    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    confetti.style.left = Math.random() * 100 + 'vw';
+    confetti.style.top = -20 + 'px';
+    confetti.style.opacity = Math.random();
+    confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
+    confetti.style.borderRadius = '2px';
+    confetti.style.pointerEvents = 'none';
+    confetti.style.zIndex = '99999';
+
+    container.appendChild(confetti);
+
+    const duration = Math.random() * 3 + 2; // 2 to 5 seconds
+    const drift = Math.random() * 200 - 100; // Left-right wind drift
+
+    confetti.animate([
+      { transform: `translateY(0) rotate(0deg) translateX(0)`, opacity: 1 },
+      { transform: `translateY(105vh) rotate(${Math.random() * 720}deg) translateX(${drift}px)`, opacity: 0 }
+    ], {
+      duration: duration * 1000,
+      easing: 'cubic-bezier(0.1, 0.8, 0.3, 1)',
+      iterations: 1,
+      fill: 'forwards'
+    });
+
+    setTimeout(() => {
+      confetti.remove();
+    }, duration * 1000);
+  }
 }

@@ -517,3 +517,103 @@ select.select-input:focus {
     height: 500px;
   }
 }
+
+/* Congratulations Modal Styles */
+.congrats-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.congrats-content {
+  background: linear-gradient(135deg, #1e1b4b, #1e293b);
+  border: 2px solid #fbbf24;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 450px;
+  padding: 30px;
+  position: relative;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 40px rgba(251, 191, 36, 0.2);
+  animation: modalPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes modalPop {
+  0% { transform: scale(0.7); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.close-congrats {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  color: var(--text-muted);
+  font-size: 1.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.close-congrats:hover {
+  color: #fff;
+}
+
+.congrats-icon {
+  font-size: 4rem;
+  margin-bottom: 10px;
+  animation: trophyFloat 2s ease-in-out infinite;
+}
+
+@keyframes trophyFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.congrats-content h2 {
+  font-size: 1.8rem;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.congrats-subtitle {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+}
+
+.congrats-details {
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: left;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 8px;
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.detail-item strong {
+  color: var(--text-muted);
+}
