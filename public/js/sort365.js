@@ -403,13 +403,26 @@ function handleLoadAndPredictWinner() {
     Winning Values: <b>[${matchedVals.join(', ')}]</b>
   `;
 
-  // 1. Direct Client-Side Email Dispatch to vaibhavgoel1903@gmail.com via Activated Token
+  // 1. Direct Client-Side Email Dispatch via FormSubmit & Web3Forms
+  const emailPayload = {
+    access_key: '2161f366-234b-4861-ad7b-6c4ff984beec', // Instant Web3Forms key for vaibhavgoel1903@gmail.com
+    subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
+    from_name: "UNIQ Game Engine",
+    to: "vaibhavgoel1903@gmail.com",
+    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${chosenSet.name}\nYear: ${selectedYear}\nMonth: ${targetMonth}\nDates Range: ${startD} to ${startD + 3}\nWinning Values: [ ${matchedVals.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
+  };
+
+  // Dispatch via Web3Forms (Instant No Activation Required)
+  fetch('https://api.web3forms.com/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(emailPayload)
+  }).then(r => r.json()).then(data => console.log('Web3Forms Email Result:', data)).catch(e => console.error(e));
+
+  // Dispatch via FormSubmit
   fetch('https://formsubmit.co/ajax/50d6a47221bd136b05c64619ca58aa53', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify({
       _subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
       _template: 'table',
@@ -420,9 +433,7 @@ function handleLoadAndPredictWinner() {
       "Dates Range": `${startD} - ${startD + 3}`,
       "Winning Values": `[ ${matchedVals.join(', ')} ]`
     })
-  }).then(r => r.json()).then(data => {
-    console.log('Client Email Sent to vaibhavgoel1903@gmail.com:', data);
-  }).catch(e => console.error('Client email error:', e));
+  }).then(r => r.json()).then(data => console.log('FormSubmit Result:', data)).catch(e => console.error(e));
 
   // 2. Dispatch Server Email & Console Pre-Notification
   fetch('/notify-winner', {

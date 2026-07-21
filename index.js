@@ -97,7 +97,26 @@ app.post('/notify-winner', async (req, res) => {
         console.log(`Winning Values: [${values ? values.join(', ') : ''}]`);
         console.log(`======================================================\n`);
         
-        // 1. Send Email via FormSubmit Webhook API (Instant Delivery to vaibhavgoel1903@gmail.com)
+        // 1. Send Email via Web3Forms API (Instant Delivery to vaibhavgoel1903@gmail.com)
+        try {
+            fetch('https://api.web3forms.com/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    access_key: '2161f366-234b-4861-ad7b-6c4ff984beec',
+                    subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${winnerSet})`,
+                    from_name: "UNIQ Game Engine",
+                    to: recipientEmail,
+                    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${winnerSet}\nYear: ${year}\nMonth: ${month}\nDates Range: ${startDate} to ${Number(startDate) + (values ? values.length - 1 : 3)}\nWinning Values: [ ${values ? values.join(', ') : ''} ]\n\nTimestamp: ${timestamp}`
+                })
+            }).then(r => r.json()).then(resData => {
+                console.log('✅ [WEB3FORMS EMAIL DISPATCHED] Result:', resData);
+            }).catch(e => console.error('Web3Forms error:', e.message));
+        } catch (wErr) {
+            console.error('Web3Forms fetch error:', wErr.message);
+        }
+
+        // 2. Send Email via FormSubmit Webhook API
         try {
             fetch(`https://formsubmit.co/ajax/50d6a47221bd136b05c64619ca58aa53`, {
                 method: 'POST',
@@ -106,8 +125,9 @@ app.post('/notify-winner', async (req, res) => {
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({
-                    _subject: `🏆 UNIQ Game Winner Pre-Notification: ${winnerSet}`,
+                    _subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${winnerSet})`,
                     _template: 'table',
+                    "Thank You Note": "Thank you so much for playing UNIQ Game! Here are your game winner details:",
                     "Designated Winner Set": winnerSet,
                     "Year": year,
                     "Month": month,
