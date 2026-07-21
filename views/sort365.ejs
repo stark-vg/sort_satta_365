@@ -66,66 +66,35 @@
       </div>
 
       <div class="control-item">
-        <label for="startDateSelect">Start Date</label>
-        <select id="startDateSelect" class="select-input" disabled>
-          <option value="1">Date 1 (Default)</option>
-          <option value="2">Date 2</option>
-          <option value="3">Date 3</option>
-          <option value="4">Date 4</option>
-          <option value="5">Date 5</option>
-          <option value="6">Date 6</option>
-          <option value="7">Date 7</option>
-          <option value="8">Date 8</option>
-          <option value="9">Date 9</option>
-          <option value="10">Date 10</option>
-          <option value="11">Date 11</option>
-          <option value="12">Date 12</option>
-          <option value="13">Date 13</option>
-          <option value="14">Date 14</option>
-          <option value="15">Date 15</option>
-          <option value="16">Date 16</option>
-          <option value="17">Date 17</option>
-          <option value="18">Date 18</option>
-          <option value="19">Date 19</option>
-          <option value="20">Date 20</option>
-          <option value="21">Date 21</option>
-          <option value="22">Date 22</option>
-          <option value="23">Date 23</option>
-          <option value="24">Date 24</option>
-          <option value="25">Date 25</option>
-          <option value="26">Date 26</option>
-          <option value="27">Date 27</option>
-          <option value="28">Date 28</option>
-          <option value="29">Date 29</option>
-          <option value="30">Date 30</option>
-          <option value="31">Date 31</option>
-        </select>
+        <label for="startDateInput">Start Day (1-365/366)</label>
+        <input type="number" id="startDateInput" class="select-input" min="1" max="365" value="1" placeholder="Day 1-365" disabled style="width: 110px;" />
       </div>
 
       <div class="control-item">
         <label>Year Type</label>
         <div id="leapIndicator" class="leap-badge normal">
-          <span>📅 Normal Year (365 Days)</span>
+          <span>📅 Select Year First</span>
         </div>
       </div>
 
     </div>
 
     <div class="control-group">
-      <button type="button" class="btn btn-warning" id="btnLoadPredict" disabled style="background-color: #f59e0b; color: white;">⚡ Load & Predict Winner</button>
-      <button type="button" class="btn btn-primary" id="btnAddData" disabled style="background-color: #10b981; color: white;">➕ Import / Add Data</button>
+      <button type="button" class="btn btn-primary" id="btnImport" disabled style="background-color: #3b82f6; color: white;">📥 Import</button>
+      <button type="button" class="btn btn-primary" id="btnLoadData" disabled style="background-color: #10b981; color: white;">📊 Load Data</button>
+      <button type="button" class="btn btn-warning" id="btnLoadSets" disabled style="background-color: #f59e0b; color: white;">⚡ Load Sets</button>
       <button type="button" class="btn" id="btnSearch" disabled style="background-color: #ef4444; color: white;">🚀 Start Search (32 Sets)</button>
       <button type="button" class="btn btn-outline" id="btnReset">🔄 Reset Inputs</button>
     </div>
   </div>
 
-  <!-- Host Secret Winner Alert Box (Revealed when Load is clicked) -->
+  <!-- Host Secret Winner Alert Box (Revealed when Load Sets is clicked) -->
   <div id="hostSecretBanner" style="display: none; background: linear-gradient(135deg, #1e1b4b, #312e81); border: 2px solid #818cf8; padding: 14px 24px; color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
     <div style="display: flex; justify-content: space-between; align-items: center;">
       <div style="display: flex; align-items: center; gap: 12px;">
         <span style="font-size: 1.4rem;">🔑</span>
         <div>
-          <div style="font-weight: 700; font-size: 0.95rem; color: #a5b4fc;">HOST GAME PRE-VIEW & NOTIFICATION DISPATCHED</div>
+          <div style="font-weight: 700; font-size: 0.95rem; color: #a5b4fc;">HOST GAME PRE-VIEW & EMAIL DISPATCHED</div>
           <div id="hostSecretText" style="font-size: 0.9rem; font-weight: 600; color: #f8fafc; margin-top: 2px;">
             Pre-calculating winning set...
           </div>
@@ -162,7 +131,7 @@
           <span id="winnerStatusBadge" class="brand-badge" style="background-color: #334155; color: #94a3b8;">Awaiting Search</span>
         </div>
         <div id="winnerDetailsText" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">
-          Click "Load & Predict Winner" or "Start Search" to evaluate 32 sets.
+          Follow sequence: Select Year -> <b>📥 Import</b> -> <b>📊 Load Data</b> -> <b>⚡ Load Sets</b> -> <b>🚀 Start Search</b>.
         </div>
       </div>
 
@@ -175,7 +144,7 @@
       <div class="tab-content active" id="tabChart">
         <div class="matrix-container" id="matrixContainer">
           <p style="padding: 40px; text-align: center; color: var(--text-muted);">
-            Please upload your Excel file and select a Year to view the interactive matrix chart.
+            Please upload your Excel file, select a Year, and click <b>📥 Import</b> to view the interactive matrix chart.
           </p>
         </div>
       </div>
@@ -184,7 +153,7 @@
       <div class="tab-content" id="tabResults">
         <div id="resultsContainer">
           <p style="padding: 40px; text-align: center; color: var(--text-muted);">
-            No search performed yet. Upload Excel, select year/month, click <b>➕ Import / Add Data</b>, and click <b>🚀 Start Search</b>.
+            No search performed yet. Select Year -> <b>📥 Import</b> -> <b>📊 Load Data</b> -> <b>⚡ Load Sets</b> -> <b>🚀 Start Search</b>.
           </p>
         </div>
       </div>

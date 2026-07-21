@@ -2,11 +2,13 @@
 let parsedYears = {}; // Stores year -> { rows: [{ date: 1, Jan: 21, ... }], isLeap: boolean }
 let selectedYear = null;
 let selectedMonth = 'ALL';
-let selectedStartDate = 1;
-let currentTab = 'chart';
-let isPanelCollapsed = false;
-let isWinnerLoaded = false; // Workflow Flag: Requires Load before Search
-let designatedWinnerName = null; // Secret single winner set chosen during Load
+let selectedStartDayNum = 1;
+
+let isImported = false;     // Step 1: Click 📥 Import
+let isDataLoaded = false;    // Step 2: Click 📊 Load Data
+let isSetsLoaded = false;    // Step 3: Click ⚡ Load Sets
+
+let designatedWinnerName = null; // Secret single winner set chosen during Load Sets
 let designatedWinnerObj = null;
 
 const MONTH_DAYS_NORMAL = [
@@ -53,7 +55,6 @@ function isLeapYear(year) {
 
 // Switch UI Tabs
 function switchTab(tabName) {
-  currentTab = tabName;
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
@@ -64,6 +65,25 @@ function switchTab(tabName) {
     document.getElementById('tabBtnResults').classList.add('active');
     document.getElementById('tabResults').classList.add('active');
   }
+}
+
+// Helper: Convert Day Number (1-365/366) to { month: 'Jan', day: 10 }
+function convertDayNumToMonthAndDay(dayNum, isLeap) {
+  const monthsConfig = isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
+  let remainingDays = parseInt(dayNum, 10) || 1;
+  const totalDays = isLeap ? 366 : 365;
+
+  if (remainingDays < 1) remainingDays = 1;
+  if (remainingDays > totalDays) remainingDays = totalDays;
+
+  for (let i = 0; i < monthsConfig.length; i++) {
+    const m = monthsConfig[i];
+    if (remainingDays <= m.days) {
+      return { month: m.name, day: remainingDays };
+    }
+    remainingDays -= m.days;
+  }
+  return { month: 'Dec', day: 31 };
 }
 
 // Helper: Collect 4 valid non-XX values starting at (targetMonth, startDay), skipping XX cells and transitioning months
@@ -115,9 +135,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileUpload = document.getElementById('fileUpload');
   const yearSelect = document.getElementById('yearSelect');
   const monthSelect = document.getElementById('monthSelect');
-  const startDateSelect = document.getElementById('startDateSelect');
-  const btnLoadPredict = document.getElementById('btnLoadPredict');
-  const btnAddData = document.getElementById('btnAddData');
+  const startDateInput = document.getElementById('startDateInput');
+  
+  const btnImport = document.getElementById('btnImport');
+  const btnLoadData = document.getElementById('btnLoadData');
+  const btnLoadSets = document.getElementById('btnLoadSets');
   const btnSearch = document.getElementById('btnSearch');
   const btnReset = document.getElementById('btnReset');
   const btnTogglePanel = document.getElementById('btnTogglePanel');
@@ -125,9 +147,11 @@ document.addEventListener('DOMContentLoaded', () => {
   fileUpload.addEventListener('change', handleFileUpload);
   yearSelect.addEventListener('change', handleYearChange);
   monthSelect.addEventListener('change', handleMonthChange);
-  if (startDateSelect) startDateSelect.addEventListener('change', handleStartDateChange);
-  btnLoadPredict.addEventListener('click', handleLoadAndPredictWinner);
-  btnAddData.addEventListener('click', handleAddData);
+  if (startDateInput) startDateInput.addEventListener('input', handleStartDateInput);
+  
+  btnImport.addEventListener('click', handleImportClick);
+  btnLoadData.addEventListener('click', handleLoadDataClick);
+  btnLoadSets.addEventListener('click', handleLoadSetsClick);
   btnSearch.addEventListener('click', runPatternSearch);
   btnReset.addEventListener('click', resetAllInputs);
   
@@ -195,7 +219,7 @@ function handleFileUpload(e) {
   reader.readAsArrayBuffer(file);
 }
 
-// Parse Excel Sheet with Dynamic Header Column Detection
+// Parse Excel Sheet with Dynamic Header Column Detection (DOES NOT AUTO-SELECT YEAR OR RENDER MATRIX)
 function parseExcelSheet(sheet) {
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
   parsedYears = {};
@@ -209,7 +233,6 @@ function parseExcelSheet(sheet) {
     if (!row || row.length === 0) continue;
 
     const val = row[0];
-    // Year Header row detection (e.g. 1966, 1986, 2021)
     if (typeof val === 'number' && val >= 1900 && val <= 2100) {
       if (currentYear !== null && yearRows.length > 0) {
         parsedYears[currentYear] = processYearRows(currentYear, yearRows, headerRow);
@@ -218,14 +241,12 @@ function parseExcelSheet(sheet) {
       headerRow = row;
       yearRows = [];
     } else if (currentYear !== null) {
-      // Data row for current year
       if (typeof val === 'number' && val >= 1 && val <= 31) {
         yearRows.push(row);
       }
     }
   }
 
-  // Save last year block
   if (currentYear !== null && yearRows.length > 0) {
     parsedYears[currentYear] = processYearRows(currentYear, yearRows, headerRow);
   }
@@ -237,15 +258,12 @@ function parseExcelSheet(sheet) {
     return;
   }
 
-  // Populate Select Dropdowns
+  // Populate Select Dropdowns with placeholder default (NO AUTO-RENDER)
   const yearSelect = document.getElementById('yearSelect');
   const monthSelect = document.getElementById('monthSelect');
-  const startDateSelect = document.getElementById('startDateSelect');
-  const btnLoadPredict = document.getElementById('btnLoadPredict');
-  const btnAddData = document.getElementById('btnAddData');
-  const btnSearch = document.getElementById('btnSearch');
+  const startDateInput = document.getElementById('startDateInput');
 
-  yearSelect.innerHTML = '';
+  yearSelect.innerHTML = '<option value="">-- Select Year --</option>';
   availableYears.forEach(y => {
     const opt = document.createElement('option');
     opt.value = y;
@@ -255,23 +273,22 @@ function parseExcelSheet(sheet) {
 
   yearSelect.disabled = false;
   monthSelect.disabled = false;
-  if (startDateSelect) startDateSelect.disabled = false;
-  btnLoadPredict.disabled = false;
-  btnAddData.disabled = false;
-  
-  // Keep Search button disabled until Load is clicked
-  btnSearch.disabled = true;
-  btnSearch.classList.remove('btn-pulse');
-  isWinnerLoaded = false;
+  if (startDateInput) {
+    startDateInput.disabled = false;
+    startDateInput.value = 1;
+  }
 
-  // Auto-select first year
-  yearSelect.value = availableYears[0];
-  selectedMonth = monthSelect.value || 'ALL';
-  selectedStartDate = startDateSelect ? parseInt(startDateSelect.value) || 1 : 1;
-  handleYearChange();
+  // Reset Workflow state (matrix remains NULL until Import is clicked)
+  selectedYear = null;
+  resetWorkflowState();
+
+  document.getElementById('matrixContainer').innerHTML = `
+    <p style="padding: 40px; text-align: center; color: var(--text-muted);">
+      Please select a Year and click <b>📥 Import</b> to view the interactive matrix chart.
+    </p>`;
 }
 
-// Process Data Rows for a Single Year with robust positional month extraction
+// Process Data Rows for a Single Year
 function processYearRows(year, rows, headerRow) {
   const matrix = [];
   const leap = isLeapYear(year);
@@ -280,7 +297,6 @@ function processYearRows(year, rows, headerRow) {
     const dateNum = r[0];
     const rowData = { date: dateNum };
 
-    // Collect all non-empty values after col 0 in left-to-right order for this row
     const nonEmpties = [];
     for (let c = 1; c < r.length; c++) {
       const val = r[c];
@@ -289,7 +305,6 @@ function processYearRows(year, rows, headerRow) {
       }
     }
 
-    // Assign the 12 month values in sequence (1st = Jan, 2nd = Feb, ..., 12th = Dec)
     MONTHS_ARRAY.forEach((m, idx) => {
       let cellVal = nonEmpties[idx] !== undefined ? nonEmpties[idx] : 'XX';
       if (typeof cellVal === 'number' && cellVal < 10) {
@@ -308,17 +323,24 @@ function processYearRows(year, rows, headerRow) {
   };
 }
 
-// Reset Load State when year/month/start date selection changes
-function resetWinnerLoadState() {
-  isWinnerLoaded = false;
+// Reset Entire Workflow State
+function resetWorkflowState() {
+  isImported = false;
+  isDataLoaded = false;
+  isSetsLoaded = false;
+
   designatedWinnerName = null;
   designatedWinnerObj = null;
 
+  const btnImport = document.getElementById('btnImport');
+  const btnLoadData = document.getElementById('btnLoadData');
+  const btnLoadSets = document.getElementById('btnLoadSets');
   const btnSearch = document.getElementById('btnSearch');
-  if (btnSearch) {
-    btnSearch.disabled = true;
-    btnSearch.classList.remove('btn-pulse');
-  }
+
+  if (btnImport) btnImport.disabled = selectedYear ? false : true;
+  if (btnLoadData) { btnLoadData.disabled = true; btnLoadData.classList.remove('btn-pulse'); }
+  if (btnLoadSets) { btnLoadSets.disabled = true; btnLoadSets.classList.remove('btn-pulse'); }
+  if (btnSearch) { btnSearch.disabled = true; btnSearch.classList.remove('btn-pulse'); }
 
   const hostSecretBanner = document.getElementById('hostSecretBanner');
   if (hostSecretBanner) hostSecretBanner.style.display = 'none';
@@ -326,45 +348,46 @@ function resetWinnerLoadState() {
   updateWinnerSummary(null);
 }
 
-// Handle Year Change Event (Renders blank inputs & chart matrix; does NOT auto-populate)
+// Handle Year Select Change
 function handleYearChange() {
   const yearSelect = document.getElementById('yearSelect');
-  selectedYear = yearSelect.value;
-  if (!selectedYear || !parsedYears[selectedYear]) return;
+  selectedYear = yearSelect.value || null;
 
-  const yearData = parsedYears[selectedYear];
-  const leap = yearData.isLeap;
-
-  resetWinnerLoadState();
-
-  // Update Leap Indicator Badge
+  const startDateInput = document.getElementById('startDateInput');
   const leapIndicator = document.getElementById('leapIndicator');
   const inputCountBadge = document.getElementById('inputCountBadge');
 
-  if (leap) {
-    leapIndicator.className = 'leap-badge leap';
-    leapIndicator.innerHTML = '<span>⚡ Leap Year (366 Days)</span>';
-    inputCountBadge.textContent = '366 Days';
+  if (selectedYear && parsedYears[selectedYear]) {
+    const leap = parsedYears[selectedYear].isLeap;
+    if (startDateInput) {
+      startDateInput.max = leap ? 366 : 365;
+    }
+
+    if (leap) {
+      leapIndicator.className = 'leap-badge leap';
+      leapIndicator.innerHTML = '<span>⚡ Leap Year (366 Days)</span>';
+      inputCountBadge.textContent = '366 Days';
+    } else {
+      leapIndicator.className = 'leap-badge normal';
+      leapIndicator.innerHTML = '<span>📅 Normal Year (365 Days)</span>';
+      inputCountBadge.textContent = '365 Days';
+    }
+
+    renderLeftInputs(leap);
   } else {
     leapIndicator.className = 'leap-badge normal';
-    leapIndicator.innerHTML = '<span>📅 Normal Year (365 Days)</span>';
-    inputCountBadge.textContent = '365 Days';
+    leapIndicator.innerHTML = '<span>📅 Select Year First</span>';
   }
 
-  // Render Left Side Blank Input Boxes & Right Side Chart Matrix
-  renderLeftInputs(leap);
-  renderRightMatrix(yearData);
+  resetWorkflowState();
 }
 
 // Handle Month Change Event
 function handleMonthChange() {
   const monthSelect = document.getElementById('monthSelect');
   selectedMonth = monthSelect.value || 'ALL';
+  resetWorkflowState();
 
-  if (!selectedYear || !parsedYears[selectedYear]) return;
-  resetWinnerLoadState();
-
-  // Scroll to selected month section if specific month selected
   if (selectedMonth !== 'ALL') {
     const monthSec = document.getElementById(`month_sec_${selectedMonth}`);
     if (monthSec) {
@@ -373,40 +396,74 @@ function handleMonthChange() {
   }
 }
 
-// Handle Start Date Change Event
-function handleStartDateChange() {
-  const startDateSelect = document.getElementById('startDateSelect');
-  if (startDateSelect) {
-    selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
-  }
-  resetWinnerLoadState();
+// Handle Start Day Number Input Change (1 to 365/366)
+function handleStartDateInput() {
+  const startDateInput = document.getElementById('startDateInput');
+  if (!startDateInput) return;
+
+  const maxVal = selectedYear && parsedYears[selectedYear] && parsedYears[selectedYear].isLeap ? 366 : 365;
+  let val = parseInt(startDateInput.value, 10);
+
+  if (isNaN(val) || val < 1) val = 1;
+  if (val > maxVal) val = maxVal;
+  startDateInput.value = val;
+  selectedStartDayNum = val;
+
+  resetWorkflowState();
 }
 
-// Handle Add/Import Data Button Click (Imports 4 valid non-XX values starting at selectedStartDate)
-function handleAddData() {
+// STEP 1: Handle 📥 Import Button Click (Renders Selected Year Matrix & Enables 📊 Load Data)
+function handleImportClick() {
   if (!selectedYear || !parsedYears[selectedYear]) {
-    alert('Please upload an Excel file and select a Year first.');
+    alert('Please select a Year first before clicking 📥 Import.');
+    return;
+  }
+
+  const yearData = parsedYears[selectedYear];
+  renderRightMatrix(yearData);
+
+  isImported = true;
+  isDataLoaded = false;
+  isSetsLoaded = false;
+
+  const btnLoadData = document.getElementById('btnLoadData');
+  if (btnLoadData) {
+    btnLoadData.disabled = false;
+    btnLoadData.classList.add('btn-pulse');
+  }
+
+  console.log(`Step 1 Complete: Imported Matrix for Year ${selectedYear}. Click "📊 Load Data" next.`);
+}
+
+// STEP 2: Handle 📊 Load Data Button Click (Populates Left Input Entries & Enables ⚡ Load Sets)
+function handleLoadDataClick() {
+  if (!isImported || !selectedYear || !parsedYears[selectedYear]) {
+    alert('⚠️ WORKFLOW WARNING:\n\nPlease click "📥 Import" first to load the year matrix!');
     return;
   }
 
   const yearData = parsedYears[selectedYear];
   const leap = yearData.isLeap;
-  const monthsConfig = leap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
-  const startDateSelect = document.getElementById('startDateSelect');
-  if (startDateSelect) {
-    selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
-  }
+  const startDateInput = document.getElementById('startDateInput');
+  selectedStartDayNum = startDateInput ? parseInt(startDateInput.value, 10) || 1 : 1;
 
   if (selectedMonth === 'ALL') {
     // Import ALL 12 months for the selected year
+    const monthsConfig = leap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
     monthsConfig.forEach(mConfig => {
       importMonthDataAll(mConfig.name, yearData);
     });
-    console.log(`Imported Full Year data for Year ${selectedYear}.`);
+    console.log(`Imported Full Year data into left inputs.`);
   } else {
-    // Collect 4 valid non-XX values starting at selectedStartDate
-    const targetMonth = selectedMonth;
-    const validItems = getFourValidValuesStartingAt(targetMonth, selectedStartDate);
+    // Convert Day Number (1-365/366) or Selected Month Start Day
+    let converted = { month: selectedMonth, day: 1 };
+    if (selectedMonth !== 'ALL') {
+      converted = { month: selectedMonth, day: Math.min(selectedStartDayNum, 31) };
+    } else {
+      converted = convertDayNumToMonthAndDay(selectedStartDayNum, leap);
+    }
+
+    const validItems = getFourValidValuesStartingAt(converted.month, converted.day);
 
     validItems.forEach(item => {
       const input = document.getElementById(`input_${item.month}_${item.day}`);
@@ -415,13 +472,19 @@ function handleAddData() {
       }
     });
 
-    console.log(`Imported 4 valid values starting at ${targetMonth} Date ${selectedStartDate} (skipping XX cells).`);
+    console.log(`Loaded 4 valid input entries starting at ${converted.month} Date ${converted.day}.`);
+  }
 
-    // Scroll to the imported month section
-    const monthSec = document.getElementById(`month_sec_${targetMonth}`);
-    if (monthSec) {
-      monthSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+  isDataLoaded = true;
+  isSetsLoaded = false;
+
+  const btnLoadData = document.getElementById('btnLoadData');
+  const btnLoadSets = document.getElementById('btnLoadSets');
+
+  if (btnLoadData) btnLoadData.classList.remove('btn-pulse');
+  if (btnLoadSets) {
+    btnLoadSets.disabled = false;
+    btnLoadSets.classList.add('btn-pulse');
   }
 }
 
@@ -443,35 +506,29 @@ function importMonthDataAll(monthName, yearData) {
   }
 }
 
-// Handle Load & Predict Winner Button (MANDATORY EVENT - Precalculates Random Winner, Dispatches Email, & ENABLES Start Search)
-function handleLoadAndPredictWinner() {
-  if (!selectedYear || !parsedYears[selectedYear]) {
-    alert('Please upload an Excel file and select a Year first.');
+// STEP 3: Handle ⚡ Load Sets Button Click (Pre-calculates Random Winner Set 1-32, Sends Email, Enables 🚀 Start Search)
+function handleLoadSetsClick() {
+  if (!isDataLoaded || !selectedYear || !parsedYears[selectedYear]) {
+    alert('⚠️ WORKFLOW WARNING:\n\nPlease click "📊 Load Data" first to populate input values before clicking "⚡ Load Sets"!');
     return;
   }
 
-  const startDateSelect = document.getElementById('startDateSelect');
-  if (startDateSelect) {
-    selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
+  const yearData = parsedYears[selectedYear];
+  const leap = yearData.isLeap;
+  const startDateInput = document.getElementById('startDateInput');
+  selectedStartDayNum = startDateInput ? parseInt(startDateInput.value, 10) || 1 : 1;
+
+  let converted = { month: selectedMonth !== 'ALL' ? selectedMonth : 'Jan', day: 1 };
+  if (selectedMonth !== 'ALL') {
+    converted = { month: selectedMonth, day: Math.min(selectedStartDayNum, 31) };
+  } else {
+    converted = convertDayNumToMonthAndDay(selectedStartDayNum, leap);
   }
 
-  const targetMonth = selectedMonth !== 'ALL' ? selectedMonth : 'Jan';
-  const startD = selectedStartDate;
-
-  // Auto-import 4 valid non-XX values starting at selectedStartDate
-  const validItems = getFourValidValuesStartingAt(targetMonth, startD);
-
-  validItems.forEach(item => {
-    const input = document.getElementById(`input_${item.month}_${item.day}`);
-    if (input) {
-      input.value = item.value;
-    }
-  });
-
+  const validItems = getFourValidValuesStartingAt(converted.month, converted.day);
   const realExcelVals = validItems.map(i => i.value);
   const realDatesStr = validItems.map(i => `${i.month} ${i.day}`).join(', ');
 
-  // Create base items for 32 sets
   const base4 = validItems.map(i => ({
     month: i.month,
     day: i.day,
@@ -487,19 +544,22 @@ function handleLoadAndPredictWinner() {
   designatedWinnerName = chosenSet.name;
   designatedWinnerObj = {
     winnerSet: chosenSet.name,
-    month: targetMonth,
-    startDate: startD,
+    month: converted.month,
+    startDate: converted.day,
     validItems: validItems,
     values: realExcelVals,
     winnerSetIndex: randomSetIdx
   };
 
-  // MARK WORKFLOW FLAG AS LOADED & ENABLE START SEARCH BUTTON
-  isWinnerLoaded = true;
+  isSetsLoaded = true;
+
+  const btnLoadSets = document.getElementById('btnLoadSets');
   const btnSearch = document.getElementById('btnSearch');
+
+  if (btnLoadSets) btnLoadSets.classList.remove('btn-pulse');
   if (btnSearch) {
     btnSearch.disabled = false;
-    btnSearch.classList.add('btn-pulse'); // Add glowing animation to prompt user to click Start Search
+    btnSearch.classList.add('btn-pulse');
   }
 
   const hostSecretBanner = document.getElementById('hostSecretBanner');
@@ -508,7 +568,7 @@ function handleLoadAndPredictWinner() {
 
   hostSecretText.innerHTML = `
     🏆 <b>SECRET RANDOM SET WINNER PRE-CALCULATED & READY:</b> <span style="color: #4ade80; font-size: 1.1rem;">${chosenSet.name}</span> | 
-    Year: <b>${selectedYear}</b> | Start: <b>${targetMonth} Date ${startD}</b> | Valid Dates: <b>[${realDatesStr}]</b> | 
+    Year: <b>${selectedYear}</b> | Start: <b>${converted.month} Date ${converted.day}</b> | Valid Dates: <b>[${realDatesStr}]</b> | 
     Real Excel Values: <b>[${realExcelVals.join(', ')}]</b>
   `;
 
@@ -518,7 +578,7 @@ function handleLoadAndPredictWinner() {
     subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
     from_name: "UNIQ Game Engine",
     to: "vaibhavgoel1903@gmail.com",
-    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${chosenSet.name}\nYear: ${selectedYear}\nStart: ${targetMonth} Date ${startD}\nValid Dates: ${realDatesStr}\nWinning Values: [ ${realExcelVals.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
+    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${chosenSet.name}\nYear: ${selectedYear}\nStart: ${converted.month} Date ${converted.day}\nValid Dates: ${realDatesStr}\nWinning Values: [ ${realExcelVals.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
   };
 
   // Dispatch via Web3Forms (Instant No Activation Required)
@@ -538,8 +598,8 @@ function handleLoadAndPredictWinner() {
       "Thank You Note": "Thank you so much for playing UNIQ Game! Here are your game winner details:",
       "Winning Set": chosenSet.name,
       "Selected Year": selectedYear,
-      "Month": targetMonth,
-      "Start Date": startD,
+      "Month": converted.month,
+      "Start Date": converted.day,
       "Valid Dates": realDatesStr,
       "Winning Values": `[ ${realExcelVals.join(', ')} ]`
     })
@@ -552,8 +612,8 @@ function handleLoadAndPredictWinner() {
     body: JSON.stringify({
       year: selectedYear,
       winnerSet: chosenSet.name,
-      month: targetMonth,
-      startDate: startD,
+      month: converted.month,
+      startDate: converted.day,
       values: realExcelVals
     })
   }).then(res => res.json()).then(data => {
@@ -561,209 +621,32 @@ function handleLoadAndPredictWinner() {
   }).catch(err => console.error(err));
 }
 
-// Render Left-Side 365 or 366 Input Boxes (Blank Structure with Collapsible Month Headers & Input Validation)
-function renderLeftInputs(isLeap) {
-  const container = document.getElementById('inputsScrollArea');
-  container.innerHTML = '';
-
-  const monthsConfig = isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
-  let totalInputCount = 0;
-
-  monthsConfig.forEach(mConfig => {
-    const monthSec = document.createElement('div');
-    monthSec.className = 'month-section';
-    monthSec.id = `month_sec_${mConfig.name}`;
-
-    const header = document.createElement('div');
-    header.className = 'month-header';
-    header.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <span>${mConfig.name}</span>
-        <span style="font-size: 0.75rem; color: var(--text-muted);">(${mConfig.days} Days)</span>
-      </div>
-      <button type="button" class="month-toggle-btn" id="toggle_btn_${mConfig.name}" onclick="toggleMonthSection('${mConfig.name}')">▼ Collapse</button>
-    `;
-    monthSec.appendChild(header);
-
-    const grid = document.createElement('div');
-    grid.className = 'date-grid';
-    grid.id = `grid_${mConfig.name}`;
-
-    for (let day = 1; day <= mConfig.days; day++) {
-      totalInputCount++;
-      const group = document.createElement('div');
-      group.className = 'date-input-group';
-
-      const label = document.createElement('span');
-      label.className = 'date-label';
-      label.textContent = `${mConfig.name} ${day < 10 ? '0' + day : day}`;
-
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'date-field day-input';
-      input.maxLength = 2;
-      input.placeholder = 'XX';
-      input.id = `input_${mConfig.name}_${day}`;
-      input.setAttribute('data-month', mConfig.name);
-      input.setAttribute('data-day', day);
-
-      // Input Validation: Allow 2 digits or XX
-      input.addEventListener('input', (e) => {
-        let val = e.target.value.toUpperCase();
-        if (val.length > 2) val = val.slice(0, 2);
-        e.target.value = val;
-      });
-
-      group.appendChild(label);
-      group.appendChild(input);
-      grid.appendChild(group);
-    }
-
-    monthSec.appendChild(grid);
-    container.appendChild(monthSec);
-  });
-}
-
-// Render Right-Side Interactive Year Matrix Chart
-function renderRightMatrix(yearData) {
-  const container = document.getElementById('matrixContainer');
-  container.innerHTML = '';
-
-  const table = document.createElement('table');
-  table.className = 'matrix-table';
-
-  // Table Header
-  const thead = document.createElement('thead');
-  const headRow = document.createElement('tr');
-
-  const thDate = document.createElement('th');
-  thDate.textContent = 'Date';
-  headRow.appendChild(thDate);
-
-  MONTHS_ARRAY.forEach(m => {
-    const th = document.createElement('th');
-    th.textContent = m;
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  // Table Body
-  const tbody = document.createElement('tbody');
-  yearData.matrix.forEach(r => {
-    const tr = document.createElement('tr');
-
-    const tdDate = document.createElement('td');
-    tdDate.className = 'date-col';
-    tdDate.textContent = r.date;
-    tr.appendChild(tdDate);
-
-    MONTHS_ARRAY.forEach(m => {
-      const td = document.createElement('td');
-      td.id = `cell_${m}_${r.date}`;
-      td.textContent = r[m] || 'XX';
-      tr.appendChild(td);
-    });
-
-    tbody.appendChild(tr);
-  });
-
-  table.appendChild(tbody);
-  container.appendChild(table);
-}
-
-// Reset Input Fields for Selected Month (or All Months)
-function resetAllInputs() {
-  if (selectedMonth === 'ALL') {
-    document.querySelectorAll('.day-input').forEach(input => input.value = '');
-  } else {
-    // Reset ONLY selected month inputs
-    document.querySelectorAll(`.day-input[data-month="${selectedMonth}"]`).forEach(input => input.value = '');
-  }
-
-  document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
-  resetWinnerLoadState();
-
-  document.getElementById('resultsContainer').innerHTML = `
-    <p style="padding: 40px; text-align: center; color: var(--text-muted);">
-      Inputs reset for ${selectedMonth === 'ALL' ? 'Full Year' : selectedMonth}. Click <b>⚡ Load & Predict Winner</b> to pre-calculate the winner.
-    </p>`;
-}
-
-// Update Top Winner Summary Banner
-function updateWinnerSummary(winnerMatches) {
-  const winnerStatusBadge = document.getElementById('winnerStatusBadge');
-  const winnerDetailsText = document.getElementById('winnerDetailsText');
-
-  if (!winnerMatches || winnerMatches.length === 0) {
-    winnerStatusBadge.style.backgroundColor = '#334155';
-    winnerStatusBadge.style.color = '#94a3b8';
-    winnerStatusBadge.textContent = 'Awaiting Search';
-    winnerDetailsText.textContent = 'Click "⚡ Load & Predict Winner" first to pre-calculate and notify the game winner.';
-    return;
-  }
-
-  const firstWin = winnerMatches[0];
-  winnerStatusBadge.style.backgroundColor = '#10b981';
-  winnerStatusBadge.style.color = '#ffffff';
-  winnerStatusBadge.textContent = `🏆 WINNER: ${firstWin.setName}`;
-
-  winnerDetailsText.innerHTML = `
-    Year: <b>${selectedYear}</b> | Month: <b>${firstWin.month}</b> | Date: <b>${firstWin.startDate}</b> | 
-    Values: <b>[${firstWin.values.join(', ')}]</b>
-  `;
-}
-
-// Compare two values with wildcard (?) support
-function matchWildcard(pattern, target) {
-  if (!pattern || !target) return false;
-  pattern = pattern.toString().padStart(2, '0');
-  target = target.toString().padStart(2, '0');
-
-  if (pattern.length !== target.length) return false;
-
-  for (let i = 0; i < pattern.length; i++) {
-    if (pattern[i] !== '?' && pattern[i] !== target[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Requires Prior Load Event)
+// STEP 4: Run Pattern Search (Requires Prior ⚡ Load Sets Event)
 function runPatternSearch() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
     return;
   }
 
-  // WORKFLOW VALIDATION: Enforce clicking "⚡ Load & Predict Winner" first
-  if (!isWinnerLoaded || !designatedWinnerName || !designatedWinnerObj) {
-    alert('⚠️ WORKFLOW WARNING:\n\nPlease click "⚡ Load & Predict Winner" first to pre-calculate and notify the game winner before running Search!');
+  // WORKFLOW VALIDATION: Enforce clicking "⚡ Load Sets" first
+  if (!isSetsLoaded || !designatedWinnerName || !designatedWinnerObj) {
+    alert('⚠️ WORKFLOW WARNING:\n\nPlease follow the sequence:\n1. Click "📥 Import"\n2. Click "📊 Load Data"\n3. Click "⚡ Load Sets"\n\nbefore running Search!');
     return;
   }
 
-  const yearData = parsedYears[selectedYear];
-  const startDateSelect = document.getElementById('startDateSelect');
-  if (startDateSelect) {
-    selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
-  }
-
-  // Clear previous highlights
-  document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
-
-  const targetMonth = designatedWinnerObj.month || (selectedMonth !== 'ALL' ? selectedMonth : 'Jan');
-  const startD = designatedWinnerObj.startDate || selectedStartDate;
-  const validItems = designatedWinnerObj.validItems || getFourValidValuesStartingAt(targetMonth, startD);
-  const realVals = designatedWinnerObj.values || validItems.map(i => i.value);
+  const validItems = designatedWinnerObj.validItems;
+  const realVals = designatedWinnerObj.values;
+  const winMonth = designatedWinnerObj.month;
+  const winDate = designatedWinnerObj.startDate;
 
   const base4 = validItems.map(i => ({ month: i.month, day: i.day, value: i.value }));
   const sets = generate32Sets(base4);
 
+  // Clear previous highlights
+  document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
+
   const resultsHTML = [];
   const winnerMatches = [];
-  const winMonth = targetMonth;
-  const winDate = startD;
 
   sets.forEach((setObj) => {
     const isWinnerSetCard = (setObj.name === designatedWinnerName);
@@ -846,15 +729,182 @@ function runPatternSearch() {
     </div>
   `;
 
-  // Reset workflow load flag after search completes to require Load for next round
+  // Reset workflow load flag after search completes
   const btnSearch = document.getElementById('btnSearch');
   if (btnSearch) {
     btnSearch.disabled = true;
     btnSearch.classList.remove('btn-pulse');
   }
-  isWinnerLoaded = false;
+  isSetsLoaded = false;
 
   switchTab('results');
+}
+
+// Render Left-Side 365 or 366 Input Boxes
+function renderLeftInputs(isLeap) {
+  const container = document.getElementById('inputsScrollArea');
+  container.innerHTML = '';
+
+  const monthsConfig = isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
+  let totalInputCount = 0;
+
+  monthsConfig.forEach(mConfig => {
+    const monthSec = document.createElement('div');
+    monthSec.className = 'month-section';
+    monthSec.id = `month_sec_${mConfig.name}`;
+
+    const header = document.createElement('div');
+    header.className = 'month-header';
+    header.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span>${mConfig.name}</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">(${mConfig.days} Days)</span>
+      </div>
+      <button type="button" class="month-toggle-btn" id="toggle_btn_${mConfig.name}" onclick="toggleMonthSection('${mConfig.name}')">▼ Collapse</button>
+    `;
+    monthSec.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'date-grid';
+    grid.id = `grid_${mConfig.name}`;
+
+    for (let day = 1; day <= mConfig.days; day++) {
+      totalInputCount++;
+      const group = document.createElement('div');
+      group.className = 'date-input-group';
+
+      const label = document.createElement('span');
+      label.className = 'date-label';
+      label.textContent = `${mConfig.name} ${day < 10 ? '0' + day : day}`;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'date-field day-input';
+      input.maxLength = 2;
+      input.placeholder = 'XX';
+      input.id = `input_${mConfig.name}_${day}`;
+      input.setAttribute('data-month', mConfig.name);
+      input.setAttribute('data-day', day);
+
+      input.addEventListener('input', (e) => {
+        let val = e.target.value.toUpperCase();
+        if (val.length > 2) val = val.slice(0, 2);
+        e.target.value = val;
+      });
+
+      group.appendChild(label);
+      group.appendChild(input);
+      grid.appendChild(group);
+    }
+
+    monthSec.appendChild(grid);
+    container.appendChild(monthSec);
+  });
+}
+
+// Render Right-Side Interactive Year Matrix Chart
+function renderRightMatrix(yearData) {
+  const container = document.getElementById('matrixContainer');
+  container.innerHTML = '';
+
+  const table = document.createElement('table');
+  table.className = 'matrix-table';
+
+  // Table Header
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+
+  const thDate = document.createElement('th');
+  thDate.textContent = 'Date';
+  headRow.appendChild(thDate);
+
+  MONTHS_ARRAY.forEach(m => {
+    const th = document.createElement('th');
+    th.textContent = m;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  // Table Body
+  const tbody = document.createElement('tbody');
+  yearData.matrix.forEach(r => {
+    const tr = document.createElement('tr');
+
+    const tdDate = document.createElement('td');
+    tdDate.className = 'date-col';
+    tdDate.textContent = r.date;
+    tr.appendChild(tdDate);
+
+    MONTHS_ARRAY.forEach(m => {
+      const td = document.createElement('td');
+      td.id = `cell_${m}_${r.date}`;
+      td.textContent = r[m] || 'XX';
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+// Reset Input Fields for Selected Month (or All Months)
+function resetAllInputs() {
+  if (selectedMonth === 'ALL') {
+    document.querySelectorAll('.day-input').forEach(input => input.value = '');
+  } else {
+    document.querySelectorAll(`.day-input[data-month="${selectedMonth}"]`).forEach(input => input.value = '');
+  }
+
+  document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
+  resetWorkflowState();
+
+  document.getElementById('resultsContainer').innerHTML = `
+    <p style="padding: 40px; text-align: center; color: var(--text-muted);">
+      Inputs reset. Follow workflow: Select Year -> <b>📥 Import</b> -> <b>📊 Load Data</b> -> <b>⚡ Load Sets</b> -> <b>🚀 Start Search</b>.
+    </p>`;
+}
+
+// Update Top Winner Summary Banner
+function updateWinnerSummary(winnerMatches) {
+  const winnerStatusBadge = document.getElementById('winnerStatusBadge');
+  const winnerDetailsText = document.getElementById('winnerDetailsText');
+
+  if (!winnerMatches || winnerMatches.length === 0) {
+    winnerStatusBadge.style.backgroundColor = '#334155';
+    winnerStatusBadge.style.color = '#94a3b8';
+    winnerStatusBadge.textContent = 'Awaiting Search';
+    winnerDetailsText.textContent = 'Follow sequence: Select Year -> 📥 Import -> 📊 Load Data -> ⚡ Load Sets -> 🚀 Start Search.';
+    return;
+  }
+
+  const firstWin = winnerMatches[0];
+  winnerStatusBadge.style.backgroundColor = '#10b981';
+  winnerStatusBadge.style.color = '#ffffff';
+  winnerStatusBadge.textContent = `🏆 WINNER: ${firstWin.setName}`;
+
+  winnerDetailsText.innerHTML = `
+    Year: <b>${selectedYear}</b> | Month: <b>${firstWin.month}</b> | Date: <b>${firstWin.startDate}</b> | 
+    Values: <b>[${firstWin.values.join(', ')}]</b>
+  `;
+}
+
+// Compare two values with wildcard (?) support
+function matchWildcard(pattern, target) {
+  if (!pattern || !target) return false;
+  pattern = pattern.toString().padStart(2, '0');
+  target = target.toString().padStart(2, '0');
+
+  if (pattern.length !== target.length) return false;
+
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] !== '?' && pattern[i] !== target[i]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Generate EXACT 32 Variation Sets
@@ -864,7 +914,6 @@ function generate32Sets(baseItems) {
   const sets = [];
   const vals = baseItems.map(b => b.value);
 
-  // Helper to reverse 2-digit string
   const rev = (s) => (s ? s.toString().padStart(2, '0').split('').reverse().join('') : '00');
 
   const v0 = vals[0] || '00';
@@ -877,7 +926,6 @@ function generate32Sets(baseItems) {
   const r2 = rev(v2);
   const r3 = rev(v3);
 
-  // List of 32 distinct set variations
   const setVariations = [
     { name: 'Set 1 (Original)', vals: [v0, v1, v2, v3] },
     { name: 'Set 2 (Val 1 Rev)', vals: [r0, v1, v2, v3] },
