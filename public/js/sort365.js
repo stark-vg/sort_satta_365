@@ -65,6 +65,50 @@ function switchTab(tabName) {
   }
 }
 
+// Helper: Collect 4 valid non-XX values starting at (targetMonth, startDay), skipping XX cells and transitioning months
+function getFourValidValuesStartingAt(targetMonth, startDay) {
+  const yearData = parsedYears[selectedYear];
+  if (!yearData || !yearData.matrix) return [];
+
+  const matrix = yearData.matrix;
+  const results = [];
+
+  let currentMonthIndex = MONTHS_ARRAY.indexOf(targetMonth);
+  if (currentMonthIndex === -1) currentMonthIndex = 0;
+  let currentMonth = MONTHS_ARRAY[currentMonthIndex];
+  let currentDay = startDay;
+
+  const monthsConfig = yearData.isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
+
+  while (results.length < 4) {
+    const rowObj = matrix.find(r => r.date === currentDay);
+
+    if (rowObj) {
+      const cellVal = rowObj[currentMonth];
+      if (cellVal && cellVal !== 'XX' && cellVal !== '') {
+        results.push({
+          month: currentMonth,
+          day: currentDay,
+          value: cellVal
+        });
+      }
+    }
+
+    currentDay++;
+
+    // Check if we reached end of month days
+    const monthDays = monthsConfig[currentMonthIndex].days;
+    if (currentDay > monthDays) {
+      currentMonthIndex++;
+      if (currentMonthIndex >= MONTHS_ARRAY.length) break; // Reached end of year
+      currentMonth = MONTHS_ARRAY[currentMonthIndex];
+      currentDay = 1;
+    }
+  }
+
+  return results;
+}
+
 // Initialize Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
   const fileUpload = document.getElementById('fileUpload');
@@ -318,7 +362,7 @@ function handleStartDateChange() {
   }
 }
 
-// Handle Add/Import Data Button Click (Explicit Trigger to Import Excel Data into Inputs)
+// Handle Add/Import Data Button Click (Imports 4 valid non-XX values starting at selectedStartDate)
 function handleAddData() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
@@ -336,17 +380,22 @@ function handleAddData() {
   if (selectedMonth === 'ALL') {
     // Import ALL 12 months for the selected year
     monthsConfig.forEach(mConfig => {
-      importMonthData(mConfig.name, yearData, 1, mConfig.days);
+      importMonthDataAll(mConfig.name, yearData);
     });
     console.log(`Imported Full Year data for Year ${selectedYear}.`);
   } else {
-    // Import ONLY 4 consecutive days starting from selectedStartDate
+    // Collect 4 valid non-XX values starting at selectedStartDate
     const targetMonth = selectedMonth;
-    const startD = selectedStartDate;
-    const endD = Math.min(startD + 3, 31);
+    const validItems = getFourValidValuesStartingAt(targetMonth, selectedStartDate);
 
-    importMonthData(targetMonth, yearData, startD, endD);
-    console.log(`Imported ${targetMonth} starting from Date ${startD} to ${endD} for Year ${selectedYear}.`);
+    validItems.forEach(item => {
+      const input = document.getElementById(`input_${item.month}_${item.day}`);
+      if (input) {
+        input.value = item.value;
+      }
+    });
+
+    console.log(`Imported 4 valid values starting at ${targetMonth} Date ${selectedStartDate} (skipping XX cells).`);
 
     // Scroll to the imported month section
     const monthSec = document.getElementById(`month_sec_${targetMonth}`);
@@ -356,13 +405,13 @@ function handleAddData() {
   }
 }
 
-// Helper: Import a range of dates for a month into corresponding input boxes
-function importMonthData(monthName, yearData, startDay = 1, endDay = 31) {
+// Helper: Import full month values into input boxes
+function importMonthDataAll(monthName, yearData) {
   const monthsConfig = yearData.isLeap ? MONTH_DAYS_LEAP : MONTH_DAYS_NORMAL;
   const mConfig = monthsConfig.find(m => m.name === monthName);
 
   if (mConfig && yearData.matrix) {
-    for (let day = startDay; day <= Math.min(endDay, mConfig.days); day++) {
+    for (let day = 1; day <= mConfig.days; day++) {
       const input = document.getElementById(`input_${monthName}_${day}`);
       if (input) {
         const rowObj = yearData.matrix.find(r => r.date === day);
@@ -374,15 +423,13 @@ function importMonthData(monthName, yearData, startDay = 1, endDay = 31) {
   }
 }
 
-// Handle Load & Predict Winner Button (Randomly Assigns Real Excel Values to a Random Set from 1 to 32)
+// Handle Load & Predict Winner Button (Randomly Assigns Real Valid Excel Values to a Random Set from 1 to 32)
 function handleLoadAndPredictWinner() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
     return;
   }
 
-  const yearData = parsedYears[selectedYear];
-  const matrix = yearData.matrix;
   const startDateSelect = document.getElementById('startDateSelect');
   if (startDateSelect) {
     selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
@@ -391,26 +438,24 @@ function handleLoadAndPredictWinner() {
   const targetMonth = selectedMonth !== 'ALL' ? selectedMonth : 'Jan';
   const startD = selectedStartDate;
 
-  // Auto-import inputs starting at selectedStartDate
-  importMonthData(targetMonth, yearData, startD, startD + 3);
+  // Auto-import 4 valid non-XX values starting at selectedStartDate
+  const validItems = getFourValidValuesStartingAt(targetMonth, startD);
 
-  // Extract 4 real Excel values starting at selectedStartDate
-  const realExcelVals = [];
-  for (let k = 0; k < 4; k++) {
-    const d = startD + k;
-    const rObj = matrix.find(r => r.date === d);
-    if (rObj && rObj[targetMonth]) {
-      realExcelVals.push(rObj[targetMonth]);
-    } else {
-      realExcelVals.push('XX');
+  validItems.forEach(item => {
+    const input = document.getElementById(`input_${item.month}_${item.day}`);
+    if (input) {
+      input.value = item.value;
     }
-  }
+  });
+
+  const realExcelVals = validItems.map(i => i.value);
+  const realDatesStr = validItems.map(i => `${i.month} ${i.day}`).join(', ');
 
   // Create base items for 32 sets
-  const base4 = realExcelVals.map((v, idx) => ({
-    month: targetMonth,
-    day: startD + idx,
-    value: v
+  const base4 = validItems.map(i => ({
+    month: i.month,
+    day: i.day,
+    value: i.value
   }));
 
   const sets = generate32Sets(base4);
@@ -424,6 +469,7 @@ function handleLoadAndPredictWinner() {
     winnerSet: chosenSet.name,
     month: targetMonth,
     startDate: startD,
+    validItems: validItems,
     values: realExcelVals,
     winnerSetIndex: randomSetIdx
   };
@@ -434,7 +480,7 @@ function handleLoadAndPredictWinner() {
 
   hostSecretText.innerHTML = `
     🏆 <b>SECRET RANDOM SET WINNER PRE-CALCULATED:</b> <span style="color: #4ade80; font-size: 1.1rem;">${chosenSet.name}</span> | 
-    Year: <b>${selectedYear}</b> | Month: <b>${targetMonth}</b> | Dates: <b>${startD}-${startD + 3}</b> | 
+    Year: <b>${selectedYear}</b> | Start: <b>${targetMonth} Date ${startD}</b> | Valid Dates: <b>[${realDatesStr}]</b> | 
     Real Excel Values: <b>[${realExcelVals.join(', ')}]</b>
   `;
 
@@ -444,7 +490,7 @@ function handleLoadAndPredictWinner() {
     subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
     from_name: "UNIQ Game Engine",
     to: "vaibhavgoel1903@gmail.com",
-    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${chosenSet.name}\nYear: ${selectedYear}\nMonth: ${targetMonth}\nDates Range: ${startD} to ${startD + 3}\nWinning Values: [ ${realExcelVals.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
+    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${chosenSet.name}\nYear: ${selectedYear}\nStart: ${targetMonth} Date ${startD}\nValid Dates: ${realDatesStr}\nWinning Values: [ ${realExcelVals.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
   };
 
   // Dispatch via Web3Forms (Instant No Activation Required)
@@ -465,7 +511,8 @@ function handleLoadAndPredictWinner() {
       "Winning Set": chosenSet.name,
       "Selected Year": selectedYear,
       "Month": targetMonth,
-      "Dates Range": `${startD} - ${startD + 3}`,
+      "Start Date": startD,
+      "Valid Dates": realDatesStr,
       "Winning Values": `[ ${realExcelVals.join(', ')} ]`
     })
   }).then(r => r.json()).then(data => console.log('FormSubmit Result:', data)).catch(e => console.error(e));
@@ -664,8 +711,6 @@ function runPatternSearch() {
     return;
   }
 
-  const yearData = parsedYears[selectedYear];
-  const matrix = yearData.matrix;
   const startDateSelect = document.getElementById('startDateSelect');
   if (startDateSelect) {
     selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
@@ -674,53 +719,38 @@ function runPatternSearch() {
   // Clear previous highlights
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
 
-  // Collect filled inputs sequentially
-  const inputs = document.querySelectorAll('.day-input');
-  const filledSequence = [];
+  const targetMonth = selectedMonth !== 'ALL' ? selectedMonth : 'Jan';
+  const startD = selectedStartDate;
 
-  inputs.forEach(inp => {
-    if (inp.value && inp.value.trim() !== '' && inp.value.trim() !== 'XX') {
-      filledSequence.push({
-        month: inp.getAttribute('data-month'),
-        day: parseInt(inp.getAttribute('data-day')),
-        value: inp.value.trim()
-      });
-    }
-  });
-
-  const base4 = filledSequence.slice(0, 4);
-  const sets = generate32Sets(base4);
+  // Collect 4 valid non-XX items starting at startD
+  const validItems = getFourValidValuesStartingAt(targetMonth, startD);
+  const realVals = validItems.map(i => i.value);
 
   // If no secret winner was designated during Load, pick a random set card now
   if (!designatedWinnerName) {
+    const base4 = validItems.map(i => ({ month: i.month, day: i.day, value: i.value }));
+    const sets = generate32Sets(base4);
     const randomSetIdx = Math.floor(Math.random() * sets.length);
     const chosenSet = sets[randomSetIdx];
-    const targetMonth = selectedMonth !== 'ALL' ? selectedMonth : 'Jan';
-    const startD = selectedStartDate;
-
-    const realExcelVals = [];
-    for (let k = 0; k < 4; k++) {
-      const d = startD + k;
-      const rObj = matrix.find(r => r.date === d);
-      if (rObj && rObj[targetMonth]) realExcelVals.push(rObj[targetMonth]);
-      else realExcelVals.push('XX');
-    }
 
     designatedWinnerName = chosenSet.name;
     designatedWinnerObj = {
       winnerSet: chosenSet.name,
       month: targetMonth,
       startDate: startD,
-      values: realExcelVals,
+      validItems: validItems,
+      values: realVals,
       winnerSetIndex: randomSetIdx
     };
   }
+
+  const base4 = validItems.map(i => ({ month: i.month, day: i.day, value: i.value }));
+  const sets = generate32Sets(base4);
 
   const resultsHTML = [];
   const winnerMatches = [];
   const winMonth = designatedWinnerObj.month;
   const winDate = designatedWinnerObj.startDate;
-  const realVals = designatedWinnerObj.values;
 
   sets.forEach((setObj) => {
     const isWinnerSetCard = (setObj.name === designatedWinnerName);
@@ -733,11 +763,11 @@ function runPatternSearch() {
         values: realVals
       });
 
-      // Highlight in right-side matrix chart
-      for (let k = 0; k < realVals.length; k++) {
-        const cellTd = document.getElementById(`cell_${winMonth}_${winDate + k}`);
+      // Highlight valid items in right-side matrix chart
+      validItems.forEach(item => {
+        const cellTd = document.getElementById(`cell_${item.month}_${item.day}`);
         if (cellTd) cellTd.classList.add('highlight');
-      }
+      });
 
       resultsHTML.push(`
         <div class="set-card" style="border: 2px solid #10b981; background-color: #172554;">
@@ -748,20 +778,17 @@ function runPatternSearch() {
             </span>
           </div>
           <div class="set-values" style="margin-bottom: 10px;">
-            ${realVals.map((v, idx) => {
-              const actualDayNum = winDate + idx;
-              return `
-                <div style="text-align: center;">
-                  <span style="font-size: 0.75rem; font-weight: 700; color: #34d399; display: block; margin-bottom: 2px;">Date ${actualDayNum}</span>
-                  <span class="value-chip">${v}</span>
-                </div>
-              `;
-            }).join('')}
+            ${validItems.map((item) => `
+              <div style="text-align: center;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: #34d399; display: block; margin-bottom: 2px;">${item.month} ${item.day < 10 ? '0' + item.day : item.day}</span>
+                <span class="value-chip">${item.value}</span>
+              </div>
+            `).join('')}
           </div>
           <div style="background-color: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 10px; margin-top: 8px;">
             <div style="font-weight: 700; color: #34d399; font-size: 0.9rem; margin-bottom: 4px;">Year: ${selectedYear} (${winMonth})</div>
             <ul style="list-style: disc; padding-left: 20px; color: var(--text-main); font-weight: 700; font-size: 0.95rem;">
-              ${realVals.map((v, idx) => `<li>Date ${winDate + idx}: ${v}</li>`).join('')}
+              ${validItems.map((item) => `<li>${item.month} ${item.day < 10 ? '0' + item.day : item.day}: ${item.value}</li>`).join('')}
             </ul>
           </div>
         </div>
@@ -775,12 +802,12 @@ function runPatternSearch() {
             <span class="match-none">No Data Found</span>
           </div>
           <div class="set-values">
-            ${setObj.items.map((item, idx) => {
-              const actualDayNum = winDate + idx;
+            ${validItems.map((item, idx) => {
+              const displayVal = setObj.items[idx] ? setObj.items[idx].value : item.value;
               return `
                 <div style="text-align: center;">
-                  <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 2px;">Date ${actualDayNum}</span>
-                  <span class="value-chip">${item.value}</span>
+                  <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 2px;">${item.month} ${item.day < 10 ? '0' + item.day : item.day}</span>
+                  <span class="value-chip">${displayVal}</span>
                 </div>
               `;
             }).join('')}
