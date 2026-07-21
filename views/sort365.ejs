@@ -161,34 +161,10 @@
 
   </div>
 
-  <!-- Congratulations Modal Pop-up -->
-  <div id="congratulationsModal" class="congrats-modal" style="display: none;">
-    <div class="congrats-content">
-      <span class="close-congrats" onclick="closeCongratsModal()">&times;</span>
-      <div class="congrats-icon">🏆</div>
-      <h2>CONGRATULATIONS!</h2>
-      <p class="congrats-subtitle">UNIQ Game Designated Winner Declared</p>
-      
-      <div class="congrats-details">
-        <div class="detail-item">
-          <strong>Winning Set:</strong>
-          <span id="congratsWinnerSet" style="color: #fbbf24; font-weight: 700; font-size: 1.15rem;">Set 1</span>
-        </div>
-        <div class="detail-item">
-          <strong>Year & Month:</strong>
-          <span id="congratsYearMonth" style="font-weight: 700;">1966 Jan</span>
-        </div>
-        <div class="detail-item">
-          <strong>Dates Range:</strong>
-          <span id="congratsDates" style="font-weight: 700;">Jan 01 - Jan 04</span>
-        </div>
-        <div class="detail-item">
-          <strong>Winning Values:</strong>
-          <span id="congratsValues" style="color: #34d399; font-weight: 700; letter-spacing: 1px;">[21, 74, 98, 31]</span>
-        </div>
-      </div>
-      
-      <button type="button" class="btn btn-primary" onclick="closeCongratsModal()" style="margin-top: 20px; width: 100%; justify-content: center; background: linear-gradient(135deg, #10b981, #059669); border: none;">Awesome!</button>
+  <!-- Game Result Modal Pop-up -->
+  <div id="resultModal" class="congrats-modal" style="display: none;">
+    <div class="congrats-content" id="resultModalContent">
+      <!-- Content dynamically injected by JS -->
     </div>
   </div>
 

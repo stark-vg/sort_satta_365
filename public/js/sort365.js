@@ -537,6 +537,7 @@ function handleLoadSetsClick() {
   const realExcelVals = validItems.map(i => i.value);
   const realDatesStr = validItems.map(i => `${i.month} ${i.day}`).join(', ');
 
+  // Create base items for 32 sets
   const base4 = validItems.map(i => ({
     month: i.month,
     day: i.day,
@@ -546,18 +547,46 @@ function handleLoadSetsClick() {
   const sets = generate32Sets(base4);
 
   // RANDOMLY ASSIGN ANY SET NUMBER FROM 1 TO 32 TO BE THE WINNER!
-  const randomSetIdx = Math.floor(Math.random() * sets.length);
-  const chosenSet = sets[randomSetIdx];
+  // Introduce a 15% random chance of "Bad Luck / No Winner" round!
+  const isBadLuckRound = (Math.random() < 0.15);
+  let chosenSetName = "NONE";
+  let chosenSetSubject = "";
+  let chosenSetMsg = "";
 
-  designatedWinnerName = chosenSet.name;
-  designatedWinnerObj = {
-    winnerSet: chosenSet.name,
-    month: converted.month,
-    startDate: converted.day,
-    validItems: validItems,
-    values: realExcelVals,
-    winnerSetIndex: randomSetIdx
-  };
+  if (isBadLuckRound) {
+    designatedWinnerName = "NONE";
+    designatedWinnerObj = {
+      noWinner: true,
+      winnerSet: "NONE (Bad Luck Round)",
+      month: converted.month,
+      startDate: converted.day,
+      validItems: validItems,
+      values: realExcelVals,
+      winnerSetIndex: -1
+    };
+
+    chosenSetName = "NONE (Bad Luck Round)";
+    chosenSetSubject = `💀 UNIQ Game Result: Bad Luck! (No Winner This Round)`;
+    chosenSetMsg = `Thank you so much for playing UNIQ Game!\n\n💀 Game Result: Bad Luck! No set won this round.\nYear: ${selectedYear}\nStart: ${converted.month} Date ${converted.day}\nValid Dates: ${realDatesStr}\nWinning Values: [ ${realExcelVals.join(', ')} ]\n\nIt was a bad luck round for everyone who played. Please try again!`;
+  } else {
+    const randomSetIdx = Math.floor(Math.random() * sets.length);
+    const chosenSet = sets[randomSetIdx];
+
+    designatedWinnerName = chosenSet.name;
+    designatedWinnerObj = {
+      noWinner: false,
+      winnerSet: chosenSet.name,
+      month: converted.month,
+      startDate: converted.day,
+      validItems: validItems,
+      values: realExcelVals,
+      winnerSetIndex: randomSetIdx
+    };
+
+    chosenSetName = chosenSet.name;
+    chosenSetSubject = `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`;
+    chosenSetMsg = `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${chosenSet.name}\nYear: ${selectedYear}\nStart: ${converted.month} Date ${converted.day}\nValid Dates: ${realDatesStr}\nWinning Values: [ ${realExcelVals.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`;
+  }
 
   isSetsLoaded = true;
 
@@ -574,44 +603,34 @@ function handleLoadSetsClick() {
   const hostSecretText = document.getElementById('hostSecretText');
   hostSecretBanner.style.display = 'block';
 
-  hostSecretText.innerHTML = `
-    🏆 <b>SECRET RANDOM SET WINNER PRE-CALCULATED & READY:</b> <span style="color: #4ade80; font-size: 1.1rem;">${chosenSet.name}</span> | 
-    Year: <b>${selectedYear}</b> | Start: <b>${converted.month} Date ${converted.day}</b> | Valid Dates: <b>[${realDatesStr}]</b> | 
-    Real Excel Values: <b>[${realExcelVals.join(', ')}]</b>
-  `;
+  if (isBadLuckRound) {
+    hostSecretText.innerHTML = `
+      💀 <b>BAD LUCK ROUND PRE-CALCULATED & READY:</b> <span style="color: #ef4444; font-size: 1.1rem;">NO WINNING SET THIS ROUND</span> | 
+      Year: <b>${selectedYear}</b> | Start: <b>${converted.month} Date ${converted.day}</b> | Valid Dates: <b>[${realDatesStr}]</b> | 
+      Real Excel Values: <b>[${realExcelVals.join(', ')}]</b>
+    `;
+  } else {
+    hostSecretText.innerHTML = `
+      🏆 <b>SECRET RANDOM SET WINNER PRE-CALCULATED & READY:</b> <span style="color: #4ade80; font-size: 1.1rem;">${chosenSetName}</span> | 
+      Year: <b>${selectedYear}</b> | Start: <b>${converted.month} Date ${converted.day}</b> | Valid Dates: <b>[${realDatesStr}]</b> | 
+      Real Excel Values: <b>[${realExcelVals.join(', ')}]</b>
+    `;
+  }
 
-  // Direct Client-Side Email Dispatch via Web3Forms & FormSubmit
+  // Direct Client-Side Email Dispatch via Web3Forms
   const emailPayload = {
     access_key: '2161f366-234b-4861-ad7b-6c4ff984beec',
-    subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
+    subject: chosenSetSubject,
     from_name: "UNIQ Game Engine",
     to: "vaibhavgoel1903@gmail.com",
-    message: `Thank you so much for playing UNIQ Game!\n\nHere are your Game Winner Details:\n\n🏆 Winning Set: ${chosenSet.name}\nYear: ${selectedYear}\nStart: ${converted.month} Date ${converted.day}\nValid Dates: ${realDatesStr}\nWinning Values: [ ${realExcelVals.join(', ')} ]\n\nThank you for using UNIQ Game Engine!`
+    message: chosenSetMsg
   };
 
-  // Dispatch via Web3Forms (Instant No Activation Required)
   fetch('https://api.web3forms.com/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify(emailPayload)
   }).then(r => r.json()).then(data => console.log('Web3Forms Email Result:', data)).catch(e => console.error(e));
-
-  // Dispatch via FormSubmit
-  fetch('https://formsubmit.co/ajax/50d6a47221bd136b05c64619ca58aa53', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({
-      _subject: `🎉 Thank you so much for playing UNIQ Game! (Winner: ${chosenSet.name})`,
-      _template: 'table',
-      "Thank You Note": "Thank you so much for playing UNIQ Game! Here are your game winner details:",
-      "Winning Set": chosenSet.name,
-      "Selected Year": selectedYear,
-      "Month": converted.month,
-      "Start Date": converted.day,
-      "Valid Dates": realDatesStr,
-      "Winning Values": `[ ${realExcelVals.join(', ')} ]`
-    })
-  }).then(r => r.json()).then(data => console.log('FormSubmit Result:', data)).catch(e => console.error(e));
 
   // Dispatch Server Email & Console Pre-Notification
   fetch('/notify-winner', {
@@ -619,7 +638,7 @@ function handleLoadSetsClick() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       year: selectedYear,
-      winnerSet: chosenSet.name,
+      winnerSet: chosenSetName,
       month: converted.month,
       startDate: converted.day,
       values: realExcelVals
@@ -667,6 +686,7 @@ function runPatternSearch() {
 
   // Clear previous highlights
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
+  document.querySelectorAll('.date-input-group').forEach(grp => grp.classList.remove('highlight-input', 'highlight-input-bad-luck'));
 
   // Switch to Results Tab instantly to view loading progress
   switchTab('results');
@@ -702,11 +722,18 @@ function runPatternSearch() {
       }
       isSetsLoaded = false;
 
+      const isBadLuck = designatedWinnerObj.noWinner;
+
       // Update progress badge to complete state
       const badge = document.getElementById('scanProgressBadge');
       if (badge) {
-        badge.textContent = '🏆 1 Winner Set Declared!';
-        badge.style.backgroundColor = '#10b981';
+        if (isBadLuck) {
+          badge.textContent = '💀 Bad Luck (No Winner)';
+          badge.style.backgroundColor = '#ef4444';
+        } else {
+          badge.textContent = `🏆 Winner: ${designatedWinnerObj.winnerSet}`;
+          badge.style.backgroundColor = '#10b981';
+        }
       }
 
       // Highlight winning cells in right-side matrix chart
@@ -715,21 +742,100 @@ function runPatternSearch() {
         if (cellTd) cellTd.classList.add('highlight');
       });
 
-      // Show Congratulations Pop-up Modal!
+      // Highlight corresponding inputs on the left side
+      validItems.forEach(item => {
+        const input = document.getElementById(`input_${item.month}_${item.day}`);
+        if (input && input.parentElement) {
+          if (isBadLuck) {
+            input.parentElement.classList.add('highlight-input-bad-luck');
+          } else {
+            input.parentElement.classList.add('highlight-input');
+          }
+        }
+      });
+
+      // Show Result Modal with dynamic content
       const congratsDatesStr = validItems.map(i => `${i.month} ${i.day}`).join(', ');
-      document.getElementById('congratsWinnerSet').textContent = designatedWinnerObj.winnerSet;
-      document.getElementById('congratsYearMonth').textContent = `${selectedYear} ${winMonth}`;
-      document.getElementById('congratsDates').textContent = congratsDatesStr;
-      document.getElementById('congratsValues').textContent = `[ ${realVals.join(', ')} ]`;
+      const resultModalContent = document.getElementById('resultModalContent');
+
+      if (isBadLuck) {
+        resultModalContent.innerHTML = `
+          <span class="close-congrats" onclick="closeResultModal()">&times;</span>
+          <div class="congrats-icon" style="filter: grayscale(1);">💀</div>
+          <h2 style="color: #ef4444;">BETTER LUCK NEXT TIME!</h2>
+          <p class="congrats-subtitle">Bad Luck Round — No Winner Declared</p>
+          
+          <div class="congrats-details" style="border-color: #ef4444;">
+            <div class="detail-item">
+              <strong>Game Status:</strong>
+              <span style="color: #ef4444; font-weight: 700;">No Winner</span>
+            </div>
+            <div class="detail-item">
+              <strong>Year & Month:</strong>
+              <span style="font-weight: 700;">${selectedYear} ${winMonth}</span>
+            </div>
+            <div class="detail-item">
+              <strong>Dates Evaluated:</strong>
+              <span style="font-weight: 700;">${congratsDatesStr}</span>
+            </div>
+            <div class="detail-item">
+              <strong>Values:</strong>
+              <span style="color: #cbd5e1; font-weight: 700; letter-spacing: 1px;">[ ${realVals.join(', ')} ]</span>
+            </div>
+          </div>
+          <p style="margin-top: 16px; font-size: 0.85rem; color: #94a3b8; font-weight: 600;">
+            It was a bad luck round for everyone who played. Try another round!
+          </p>
+          
+          <button type="button" class="btn btn-primary" onclick="closeResultModal()" style="margin-top: 20px; width: 100%; justify-content: center; background: linear-gradient(135deg, #64748b, #475569); border: none;">Try Again</button>
+        `;
+      } else {
+        resultModalContent.innerHTML = `
+          <span class="close-congrats" onclick="closeResultModal()">&times;</span>
+          <div class="congrats-icon">🏆</div>
+          <h2>CONGRATULATIONS!</h2>
+          <p class="congrats-subtitle">UNIQ Game Designated Winner Declared</p>
+          
+          <div class="congrats-details">
+            <div class="detail-item">
+              <strong>Winning Set:</strong>
+              <span style="color: #fbbf24; font-weight: 700; font-size: 1.15rem;">${designatedWinnerObj.winnerSet}</span>
+            </div>
+            <div class="detail-item">
+              <strong>Year & Month:</strong>
+              <span style="font-weight: 700;">${selectedYear} ${winMonth}</span>
+            </div>
+            <div class="detail-item">
+              <strong>Dates Range:</strong>
+              <span style="font-weight: 700;">${congratsDatesStr}</span>
+            </div>
+            <div class="detail-item">
+              <strong>Winning Values:</strong>
+              <span style="color: #34d399; font-weight: 700; letter-spacing: 1px;">[ ${realVals.join(', ')} ]</span>
+            </div>
+          </div>
+          
+          <button type="button" class="btn btn-primary" onclick="closeResultModal()" style="margin-top: 20px; width: 100%; justify-content: center; background: linear-gradient(135deg, #10b981, #059669); border: none;">Awesome!</button>
+        `;
+
+        winnerMatches.push({
+          setName: designatedWinnerObj.winnerSet,
+          month: winMonth,
+          startDate: winDate,
+          values: realVals
+        });
+      }
       
-      const congratsModal = document.getElementById('congratulationsModal');
-      congratsModal.style.display = 'flex';
+      const resultModal = document.getElementById('resultModal');
+      if (resultModal) resultModal.style.display = 'flex';
 
       // Update Top Winner Banner
       updateWinnerSummary(winnerMatches);
 
-      // Trigger Confetti Party!
-      triggerCongratsConfetti();
+      // Trigger Confetti Party for winner round
+      if (!isBadLuck) {
+        triggerCongratsConfetti();
+      }
       return;
     }
 
@@ -738,13 +844,6 @@ function runPatternSearch() {
     let cardHTML = '';
 
     if (isWinnerSetCard) {
-      winnerMatches.push({
-        setName: setObj.name,
-        month: winMonth,
-        startDate: winDate,
-        values: realVals
-      });
-
       cardHTML = `
         <div class="set-card" style="border: 2px solid #10b981; background-color: #172554; opacity: 0; transform: translateY(20px); transition: all 0.3s ease;">
           <div class="set-header">
@@ -1058,14 +1157,14 @@ function generate32Sets(baseItems) {
   return sets;
 }
 
-// Function to close Congratulations Modal
-function closeCongratsModal() {
-  document.getElementById('congratulationsModal').style.display = 'none';
+// Function to close Game Result Modal
+function closeResultModal() {
+  document.getElementById('resultModal').style.display = 'none';
 }
 
 // Lightweight Confetti Particles Generation Script
 function triggerCongratsConfetti() {
-  const container = document.getElementById('congratulationsModal');
+  const container = document.getElementById('resultModal');
   const colors = ['#fbbf24', '#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#a855f7'];
 
   for (let i = 0; i < 70; i++) {
