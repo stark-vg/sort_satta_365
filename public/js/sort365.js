@@ -722,23 +722,26 @@ function runPatternSearch() {
             </span>
           </div>
           <div class="set-values" style="margin-bottom: 10px;">
-            ${setObj.items.map(item => `
-              <div style="text-align: center;">
-                <span style="font-size: 0.7rem; color: var(--text-muted); display: block;">${item.day}</span>
-                <span class="value-chip">${item.value}</span>
-              </div>
-            `).join('')}
+            ${setObj.items.map((item, idx) => {
+              const actualDayNum = winDate + idx;
+              return `
+                <div style="text-align: center;">
+                  <span style="font-size: 0.75rem; font-weight: 700; color: #34d399; display: block; margin-bottom: 2px;">Date ${actualDayNum}</span>
+                  <span class="value-chip">${item.value}</span>
+                </div>
+              `;
+            }).join('')}
           </div>
           <div style="background-color: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 6px; padding: 10px; margin-top: 8px;">
             <div style="font-weight: 700; color: #34d399; font-size: 0.9rem; margin-bottom: 4px;">Year: ${selectedYear} (${winMonth})</div>
             <ul style="list-style: disc; padding-left: 20px; color: var(--text-main); font-weight: 700; font-size: 0.95rem;">
-              ${winValues.map(v => `<li>${v}</li>`).join('')}
+              ${winValues.map((v, idx) => `<li>Date ${winDate + idx}: ${v}</li>`).join('')}
             </ul>
           </div>
         </div>
       `);
     } else {
-      // All other 31 non-winning sets display No Data Found
+      // All other 31 non-winning sets display No Data Found with actual input date labels
       resultsHTML.push(`
         <div class="set-card">
           <div class="set-header">
@@ -746,12 +749,15 @@ function runPatternSearch() {
             <span class="match-none">No Data Found</span>
           </div>
           <div class="set-values">
-            ${setObj.items.map(item => `
-              <div style="text-align: center;">
-                <span style="font-size: 0.7rem; color: var(--text-muted); display: block;">${item.day}</span>
-                <span class="value-chip">${item.value}</span>
-              </div>
-            `).join('')}
+            ${setObj.items.map((item, idx) => {
+              const actualDayNum = item.day || (idx + 1);
+              return `
+                <div style="text-align: center;">
+                  <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 2px;">Date ${actualDayNum}</span>
+                  <span class="value-chip">${item.value}</span>
+                </div>
+              `;
+            }).join('')}
           </div>
         </div>
       `);
