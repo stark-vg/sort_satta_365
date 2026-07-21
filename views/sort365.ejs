@@ -75,9 +75,26 @@
     </div>
 
     <div class="control-group">
+      <button type="button" class="btn btn-warning" id="btnLoadPredict" disabled style="background-color: #f59e0b; color: white;">⚡ Load & Predict Winner</button>
       <button type="button" class="btn btn-primary" id="btnAddData" disabled style="background-color: #10b981; color: white;">➕ Import / Add Data</button>
       <button type="button" class="btn btn-primary" id="btnSearch" disabled>🚀 Start Search (32 Sets)</button>
       <button type="button" class="btn btn-outline" id="btnReset">🔄 Reset Inputs</button>
+    </div>
+  </div>
+
+  <!-- Host Secret Winner Alert Box (Revealed when Load is clicked) -->
+  <div id="hostSecretBanner" style="display: none; background: linear-gradient(135deg, #1e1b4b, #312e81); border: 2px solid #818cf8; padding: 14px 24px; color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 1.4rem;">🔑</span>
+        <div>
+          <div style="font-weight: 700; font-size: 0.95rem; color: #a5b4fc;">HOST GAME PRE-VIEW & NOTIFICATION DISPATCHED</div>
+          <div id="hostSecretText" style="font-size: 0.9rem; font-weight: 600; color: #f8fafc; margin-top: 2px;">
+            Pre-calculating winning set...
+          </div>
+        </div>
+      </div>
+      <button type="button" onclick="document.getElementById('hostSecretBanner').style.display='none'" style="background: transparent; border: 1px solid #818cf8; color: #a5b4fc; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Dismiss</button>
     </div>
   </div>
 
@@ -108,7 +125,7 @@
           <span id="winnerStatusBadge" class="brand-badge" style="background-color: #334155; color: #94a3b8;">Awaiting Search</span>
         </div>
         <div id="winnerDetailsText" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">
-          Click "Start Search" to evaluate 32 sets against year matrix.
+          Click "Load & Predict Winner" or "Start Search" to evaluate 32 sets.
         </div>
       </div>
 

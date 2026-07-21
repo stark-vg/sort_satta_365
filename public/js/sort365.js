@@ -67,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileUpload = document.getElementById('fileUpload');
   const yearSelect = document.getElementById('yearSelect');
   const monthSelect = document.getElementById('monthSelect');
+  const btnLoadPredict = document.getElementById('btnLoadPredict');
   const btnAddData = document.getElementById('btnAddData');
   const btnSearch = document.getElementById('btnSearch');
   const btnReset = document.getElementById('btnReset');
@@ -75,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
   fileUpload.addEventListener('change', handleFileUpload);
   yearSelect.addEventListener('change', handleYearChange);
   monthSelect.addEventListener('change', handleMonthChange);
+  btnLoadPredict.addEventListener('click', handleLoadAndPredictWinner);
   btnAddData.addEventListener('click', handleAddData);
   btnSearch.addEventListener('click', runPatternSearch);
   btnReset.addEventListener('click', resetAllInputs);
@@ -173,6 +175,7 @@ function parseExcelSheet(sheet) {
   // Populate Select Dropdowns
   const yearSelect = document.getElementById('yearSelect');
   const monthSelect = document.getElementById('monthSelect');
+  const btnLoadPredict = document.getElementById('btnLoadPredict');
   const btnAddData = document.getElementById('btnAddData');
 
   yearSelect.innerHTML = '';
@@ -185,6 +188,7 @@ function parseExcelSheet(sheet) {
 
   yearSelect.disabled = false;
   monthSelect.disabled = false;
+  btnLoadPredict.disabled = false;
   btnAddData.disabled = false;
   document.getElementById('btnSearch').disabled = false;
 
@@ -260,6 +264,7 @@ function handleYearChange() {
 
   // Reset Winner status banner until search is triggered
   updateWinnerSummary(null);
+  document.getElementById('hostSecretBanner').style.display = 'none';
 }
 
 // Handle Month Change Event
@@ -305,6 +310,102 @@ function handleAddData() {
     if (monthSec) {
       monthSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  }
+}
+
+// Handle Load & Predict Winner Button (Host Controls - Precalculates Winner & Sends Server Notification)
+function handleLoadAndPredictWinner() {
+  if (!selectedYear || !parsedYears[selectedYear]) {
+    alert('Please upload an Excel file and select a Year first.');
+    return;
+  }
+
+  // Auto-import data if inputs are empty
+  const yearData = parsedYears[selectedYear];
+  const inputs = document.querySelectorAll('.day-input');
+  let filledCount = 0;
+  inputs.forEach(inp => { if (inp.value && inp.value.trim() !== '' && inp.value.trim() !== 'XX') filledCount++; });
+
+  if (filledCount === 0) {
+    handleAddData();
+  }
+
+  // Pre-calculate 32 sets evaluation
+  const filledSequence = [];
+  document.querySelectorAll('.day-input').forEach(inp => {
+    if (inp.value && inp.value.trim() !== '' && inp.value.trim() !== 'XX') {
+      filledSequence.push({
+        month: inp.getAttribute('data-month'),
+        day: parseInt(inp.getAttribute('data-day')),
+        value: inp.value.trim()
+      });
+    }
+  });
+
+  const base4 = filledSequence.slice(0, 4);
+  const sets = generate32Sets(base4);
+  const matrix = yearData.matrix;
+  const winners = [];
+
+  sets.forEach(setObj => {
+    MONTHS_ARRAY.forEach(month => {
+      for (let r = 0; r <= matrix.length - setObj.items.length; r++) {
+        let isMatch = true;
+        const tempMatched = [];
+
+        for (let k = 0; k < setObj.items.length; k++) {
+          const expectedVal = setObj.items[k].value;
+          const actualCellVal = matrix[r + k][month];
+
+          if (!matchWildcard(expectedVal, actualCellVal)) {
+            isMatch = false;
+            break;
+          }
+          tempMatched.push(actualCellVal);
+        }
+
+        if (isMatch) {
+          winners.push({
+            winnerSet: setObj.name,
+            month: month,
+            startDate: matrix[r].date,
+            values: tempMatched
+          });
+          break;
+        }
+      }
+    });
+  });
+
+  const hostSecretBanner = document.getElementById('hostSecretBanner');
+  const hostSecretText = document.getElementById('hostSecretText');
+  hostSecretBanner.style.display = 'block';
+
+  if (winners.length > 0) {
+    const win = winners[0];
+    hostSecretText.innerHTML = `
+      🏆 <b>SECRET WINNER PRE-CALCULATED:</b> <span style="color: #4ade80;">${win.winnerSet}</span> | 
+      Year: <b>${selectedYear}</b> | Month: <b>${win.month}</b> | Dates: <b>${win.startDate}-${win.startDate + win.values.length - 1}</b> | 
+      Winning Values: <b>[${win.values.join(', ')}]</b>
+    `;
+
+    // Dispatch Server Pre-Notification
+    fetch('/notify-winner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        year: selectedYear,
+        winnerSet: win.winnerSet,
+        month: win.month,
+        startDate: win.startDate,
+        values: win.values
+      })
+    }).then(res => res.json()).then(data => {
+      console.log('Host Winner Notification Server Log:', data);
+    }).catch(err => console.error(err));
+
+  } else {
+    hostSecretText.innerHTML = `⚠️ <b>PRE-VIEW RESULT:</b> No winning set match found in 32 sets for Year ${selectedYear}.`;
   }
 }
 
@@ -440,6 +541,7 @@ function resetAllInputs() {
 
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
   updateWinnerSummary(null);
+  document.getElementById('hostSecretBanner').style.display = 'none';
 
   document.getElementById('resultsContainer').innerHTML = `
     <p style="padding: 40px; text-align: center; color: var(--text-muted);">
@@ -456,7 +558,7 @@ function updateWinnerSummary(winnerMatches) {
     winnerStatusBadge.style.backgroundColor = '#334155';
     winnerStatusBadge.style.color = '#94a3b8';
     winnerStatusBadge.textContent = 'Awaiting Search';
-    winnerDetailsText.textContent = 'Click "Start Search" to evaluate 32 sets against year matrix.';
+    winnerDetailsText.textContent = 'Click "Load & Predict Winner" or "Start Search" to evaluate 32 sets.';
     return;
   }
 

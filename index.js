@@ -72,6 +72,29 @@ app.get('/logout', async (req, res) => {
     }
 });
 
+app.post('/notify-winner', async (req, res) => {
+    try {
+        const { year, winnerSet, month, startDate, values } = req.body;
+        const timestamp = new Date().toLocaleString();
+        
+        console.log(`\n======================================================`);
+        console.log(`[HOST GAME WINNER NOTIFICATION] - ${timestamp}`);
+        console.log(`Year: ${year} | Winner: ${winnerSet}`);
+        console.log(`Match Location: ${month}, Date ${startDate}`);
+        console.log(`Winning Values: [${values ? values.join(', ') : ''}]`);
+        console.log(`======================================================\n`);
+        
+        return res.json({ 
+            success: true, 
+            message: `Host notification dispatched for ${winnerSet}`,
+            timestamp: timestamp
+        });
+    } catch (err) {
+        console.error("Notification error:", err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 const server = app.listen(PORT, () => {
     console.log(`365/366 Satta Sort Server successfully running on port http://localhost:${PORT}`);
 });
