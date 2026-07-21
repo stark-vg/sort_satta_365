@@ -43,7 +43,8 @@ app.get('/login', (req, res) => {
 });
 
 app.post('/login', (req, res) => {
-    const { email, password } = req.body;
+    const email = req.body.email || req.body.username;
+    const password = req.body.password;
 
     const envEmail = process.env.EMAIL || 'Davinderwadhwa974@gmail.com';
     const envPassword = process.env.PASSWORD || 'Love123456@';
