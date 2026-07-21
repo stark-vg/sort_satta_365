@@ -87,7 +87,7 @@ app.post('/notify-winner', async (req, res) => {
     try {
         const { year, winnerSet, month, startDate, values } = req.body;
         const timestamp = new Date().toLocaleString();
-        const recipientEmail = process.env.EMAIL || 'Davinderwadhwa974@gmail.com';
+        const recipientEmail = process.env.NOTIFY_EMAIL || 'vaibhavgoel1903@gmail.com';
         
         console.log(`\n======================================================`);
         console.log(`[HOST GAME WINNER NOTIFICATION] - ${timestamp}`);
