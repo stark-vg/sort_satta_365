@@ -5,6 +5,7 @@ let selectedMonth = 'ALL';
 let selectedStartDate = 1;
 let currentTab = 'chart';
 let isPanelCollapsed = false;
+let isWinnerLoaded = false; // Workflow Flag: Requires Load before Search
 let designatedWinnerName = null; // Secret single winner set chosen during Load
 let designatedWinnerObj = null;
 
@@ -242,6 +243,7 @@ function parseExcelSheet(sheet) {
   const startDateSelect = document.getElementById('startDateSelect');
   const btnLoadPredict = document.getElementById('btnLoadPredict');
   const btnAddData = document.getElementById('btnAddData');
+  const btnSearch = document.getElementById('btnSearch');
 
   yearSelect.innerHTML = '';
   availableYears.forEach(y => {
@@ -256,7 +258,11 @@ function parseExcelSheet(sheet) {
   if (startDateSelect) startDateSelect.disabled = false;
   btnLoadPredict.disabled = false;
   btnAddData.disabled = false;
-  document.getElementById('btnSearch').disabled = false;
+  
+  // Keep Search button disabled until Load is clicked
+  btnSearch.disabled = true;
+  btnSearch.classList.remove('btn-pulse');
+  isWinnerLoaded = false;
 
   // Auto-select first year
   yearSelect.value = availableYears[0];
@@ -302,6 +308,24 @@ function processYearRows(year, rows, headerRow) {
   };
 }
 
+// Reset Load State when year/month/start date selection changes
+function resetWinnerLoadState() {
+  isWinnerLoaded = false;
+  designatedWinnerName = null;
+  designatedWinnerObj = null;
+
+  const btnSearch = document.getElementById('btnSearch');
+  if (btnSearch) {
+    btnSearch.disabled = true;
+    btnSearch.classList.remove('btn-pulse');
+  }
+
+  const hostSecretBanner = document.getElementById('hostSecretBanner');
+  if (hostSecretBanner) hostSecretBanner.style.display = 'none';
+
+  updateWinnerSummary(null);
+}
+
 // Handle Year Change Event (Renders blank inputs & chart matrix; does NOT auto-populate)
 function handleYearChange() {
   const yearSelect = document.getElementById('yearSelect');
@@ -311,9 +335,7 @@ function handleYearChange() {
   const yearData = parsedYears[selectedYear];
   const leap = yearData.isLeap;
 
-  // Reset designated winner for new year
-  designatedWinnerName = null;
-  designatedWinnerObj = null;
+  resetWinnerLoadState();
 
   // Update Leap Indicator Badge
   const leapIndicator = document.getElementById('leapIndicator');
@@ -332,10 +354,6 @@ function handleYearChange() {
   // Render Left Side Blank Input Boxes & Right Side Chart Matrix
   renderLeftInputs(leap);
   renderRightMatrix(yearData);
-
-  // Reset Winner status banner until search is triggered
-  updateWinnerSummary(null);
-  document.getElementById('hostSecretBanner').style.display = 'none';
 }
 
 // Handle Month Change Event
@@ -344,6 +362,7 @@ function handleMonthChange() {
   selectedMonth = monthSelect.value || 'ALL';
 
   if (!selectedYear || !parsedYears[selectedYear]) return;
+  resetWinnerLoadState();
 
   // Scroll to selected month section if specific month selected
   if (selectedMonth !== 'ALL') {
@@ -360,6 +379,7 @@ function handleStartDateChange() {
   if (startDateSelect) {
     selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
   }
+  resetWinnerLoadState();
 }
 
 // Handle Add/Import Data Button Click (Imports 4 valid non-XX values starting at selectedStartDate)
@@ -423,7 +443,7 @@ function importMonthDataAll(monthName, yearData) {
   }
 }
 
-// Handle Load & Predict Winner Button (Randomly Assigns Real Valid Excel Values to a Random Set from 1 to 32)
+// Handle Load & Predict Winner Button (MANDATORY EVENT - Precalculates Random Winner, Dispatches Email, & ENABLES Start Search)
 function handleLoadAndPredictWinner() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
@@ -474,12 +494,20 @@ function handleLoadAndPredictWinner() {
     winnerSetIndex: randomSetIdx
   };
 
+  // MARK WORKFLOW FLAG AS LOADED & ENABLE START SEARCH BUTTON
+  isWinnerLoaded = true;
+  const btnSearch = document.getElementById('btnSearch');
+  if (btnSearch) {
+    btnSearch.disabled = false;
+    btnSearch.classList.add('btn-pulse'); // Add glowing animation to prompt user to click Start Search
+  }
+
   const hostSecretBanner = document.getElementById('hostSecretBanner');
   const hostSecretText = document.getElementById('hostSecretText');
   hostSecretBanner.style.display = 'block';
 
   hostSecretText.innerHTML = `
-    🏆 <b>SECRET RANDOM SET WINNER PRE-CALCULATED:</b> <span style="color: #4ade80; font-size: 1.1rem;">${chosenSet.name}</span> | 
+    🏆 <b>SECRET RANDOM SET WINNER PRE-CALCULATED & READY:</b> <span style="color: #4ade80; font-size: 1.1rem;">${chosenSet.name}</span> | 
     Year: <b>${selectedYear}</b> | Start: <b>${targetMonth} Date ${startD}</b> | Valid Dates: <b>[${realDatesStr}]</b> | 
     Real Excel Values: <b>[${realExcelVals.join(', ')}]</b>
   `;
@@ -533,7 +561,7 @@ function handleLoadAndPredictWinner() {
   }).catch(err => console.error(err));
 }
 
-// Render Left-Side 365 or 366 Input Boxes (Blank Structure with Collapsible Month Headers)
+// Render Left-Side 365 or 366 Input Boxes (Blank Structure with Collapsible Month Headers & Input Validation)
 function renderLeftInputs(isLeap) {
   const container = document.getElementById('inputsScrollArea');
   container.innerHTML = '';
@@ -579,10 +607,11 @@ function renderLeftInputs(isLeap) {
       input.setAttribute('data-month', mConfig.name);
       input.setAttribute('data-day', day);
 
+      // Input Validation: Allow 2 digits or XX
       input.addEventListener('input', (e) => {
-        if (e.target.value.length > 2) {
-          e.target.value = e.target.value.slice(0, 2);
-        }
+        let val = e.target.value.toUpperCase();
+        if (val.length > 2) val = val.slice(0, 2);
+        e.target.value = val;
       });
 
       group.appendChild(label);
@@ -653,14 +682,11 @@ function resetAllInputs() {
   }
 
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
-  designatedWinnerName = null;
-  designatedWinnerObj = null;
-  updateWinnerSummary(null);
-  document.getElementById('hostSecretBanner').style.display = 'none';
+  resetWinnerLoadState();
 
   document.getElementById('resultsContainer').innerHTML = `
     <p style="padding: 40px; text-align: center; color: var(--text-muted);">
-      Inputs reset for ${selectedMonth === 'ALL' ? 'Full Year' : selectedMonth}. Click <b>🚀 Start Search</b> to evaluate.
+      Inputs reset for ${selectedMonth === 'ALL' ? 'Full Year' : selectedMonth}. Click <b>⚡ Load & Predict Winner</b> to pre-calculate the winner.
     </p>`;
 }
 
@@ -673,7 +699,7 @@ function updateWinnerSummary(winnerMatches) {
     winnerStatusBadge.style.backgroundColor = '#334155';
     winnerStatusBadge.style.color = '#94a3b8';
     winnerStatusBadge.textContent = 'Awaiting Search';
-    winnerDetailsText.textContent = 'Click "Load & Predict Winner" or "Start Search" to evaluate 32 sets.';
+    winnerDetailsText.textContent = 'Click "⚡ Load & Predict Winner" first to pre-calculate and notify the game winner.';
     return;
   }
 
@@ -704,13 +730,20 @@ function matchWildcard(pattern, target) {
   return true;
 }
 
-// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Assigns Real Excel Values to a Random Set between 1 and 32)
+// Run Optimized Pattern Search Engine (Evaluates 32 Sets, Requires Prior Load Event)
 function runPatternSearch() {
   if (!selectedYear || !parsedYears[selectedYear]) {
     alert('Please upload an Excel file and select a Year first.');
     return;
   }
 
+  // WORKFLOW VALIDATION: Enforce clicking "⚡ Load & Predict Winner" first
+  if (!isWinnerLoaded || !designatedWinnerName || !designatedWinnerObj) {
+    alert('⚠️ WORKFLOW WARNING:\n\nPlease click "⚡ Load & Predict Winner" first to pre-calculate and notify the game winner before running Search!');
+    return;
+  }
+
+  const yearData = parsedYears[selectedYear];
   const startDateSelect = document.getElementById('startDateSelect');
   if (startDateSelect) {
     selectedStartDate = parseInt(startDateSelect.value, 10) || 1;
@@ -719,38 +752,18 @@ function runPatternSearch() {
   // Clear previous highlights
   document.querySelectorAll('.matrix-table td.highlight').forEach(td => td.classList.remove('highlight'));
 
-  const targetMonth = selectedMonth !== 'ALL' ? selectedMonth : 'Jan';
-  const startD = selectedStartDate;
-
-  // Collect 4 valid non-XX items starting at startD
-  const validItems = getFourValidValuesStartingAt(targetMonth, startD);
-  const realVals = validItems.map(i => i.value);
-
-  // If no secret winner was designated during Load, pick a random set card now
-  if (!designatedWinnerName) {
-    const base4 = validItems.map(i => ({ month: i.month, day: i.day, value: i.value }));
-    const sets = generate32Sets(base4);
-    const randomSetIdx = Math.floor(Math.random() * sets.length);
-    const chosenSet = sets[randomSetIdx];
-
-    designatedWinnerName = chosenSet.name;
-    designatedWinnerObj = {
-      winnerSet: chosenSet.name,
-      month: targetMonth,
-      startDate: startD,
-      validItems: validItems,
-      values: realVals,
-      winnerSetIndex: randomSetIdx
-    };
-  }
+  const targetMonth = designatedWinnerObj.month || (selectedMonth !== 'ALL' ? selectedMonth : 'Jan');
+  const startD = designatedWinnerObj.startDate || selectedStartDate;
+  const validItems = designatedWinnerObj.validItems || getFourValidValuesStartingAt(targetMonth, startD);
+  const realVals = designatedWinnerObj.values || validItems.map(i => i.value);
 
   const base4 = validItems.map(i => ({ month: i.month, day: i.day, value: i.value }));
   const sets = generate32Sets(base4);
 
   const resultsHTML = [];
   const winnerMatches = [];
-  const winMonth = designatedWinnerObj.month;
-  const winDate = designatedWinnerObj.startDate;
+  const winMonth = targetMonth;
+  const winDate = startD;
 
   sets.forEach((setObj) => {
     const isWinnerSetCard = (setObj.name === designatedWinnerName);
@@ -832,6 +845,14 @@ function runPatternSearch() {
       ${resultsHTML.join('')}
     </div>
   `;
+
+  // Reset workflow load flag after search completes to require Load for next round
+  const btnSearch = document.getElementById('btnSearch');
+  if (btnSearch) {
+    btnSearch.disabled = true;
+    btnSearch.classList.remove('btn-pulse');
+  }
+  isWinnerLoaded = false;
 
   switchTab('results');
 }

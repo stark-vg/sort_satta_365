@@ -92,6 +92,33 @@ body {
   transform: translateY(-1px);
 }
 
+.btn-outline:hover {
+  background-color: var(--panel-border);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.btn-pulse {
+  animation: pulseGlow 1.5s infinite !important;
+}
+
 .btn-warning {
   background-color: var(--accent-warning);
   color: #fff;
